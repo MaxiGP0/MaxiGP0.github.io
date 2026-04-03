@@ -1,17 +1,17 @@
-body { margin: 0; overflow: hidden; background: #f0f0f0; font-family: sans-serif; }
+body { margin: 0; overflow: hidden; background: #e5e5e5; touch-action: none; }
 #toolbar {
     position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-    background: white; padding: 8px; border-radius: 10px;
-    display: flex; gap: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000;
+    background: rgba(255, 255, 255, 0.9); padding: 5px; border-radius: 50px;
+    display: flex; gap: 5px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000;
+    max-width: 95vw; overflow-x: auto;
 }
-button { padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; cursor: pointer; background: white; }
-button.active { background: #4caf50; color: white; border-color: #388e3c; }
-#pizarra { 
-    background: white; 
-    background-image: radial-gradient(#d1d1d1 1px, transparent 1px);
-    background-size: 30px 30px;
+button { 
+    min-width: 40px; height: 40px; border: none; border-radius: 50%; 
+    cursor: pointer; background: transparent; font-size: 18px;
 }
+button.active { background: #4caf50; color: white; }
+#pizarra { display: block; background: white; cursor: crosshair; }
 .cursor-fantasma {
-    position: absolute; width: 12px; height: 12px; background: red;
+    position: absolute; width: 10px; height: 10px; background: red;
     border-radius: 50%; pointer-events: none; z-index: 999;
 }
