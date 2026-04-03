@@ -5,12 +5,21 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let modo = 'select', elementos = [], dibujando = false, seleccionado = null, elementoActual = null;
-let camera = { x: 0, y: 0 }, isPanning = false, startPan = { x: 0, y: 0 };
+
+// CÁMARA: Ahora incluye 'z' para el Zoom (1 = 100%)
+let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 let handleSeleccionado = null, historialUndo = [], historialRedo = [];
+
+// VARIABLES ANTI-BUG (Evita borrar todo al entrar desde celular)
+let historialCargado = false;
+let cambioRealizado = false; 
+
+// VARIABLES PARA ZOOM EN CELULAR (Pinch)
+let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- UTILIDADES DE MEMORIA ---
+// --- MEMORIA ---
 function guardarEstado() {
     const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; }));
     historialUndo.push(snap);
@@ -22,7 +31,7 @@ function aplicarEstado(s) {
     elementos = s;
     elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; el.imgObj.onload = render; }});
     render();
-    socket.emit('sync_todo', elementos);
+    if(historialCargado) socket.emit('sync_todo', elementos);
 }
 
 // --- BOTONES ---
@@ -33,6 +42,7 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         else if(id === 'btn-save') guardarLocal();
         else if(id === 'btn-load') cargarLocal();
         else if(id === 'btn-clear') reiniciarLienzo();
+        else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; render(); }
         else {
             document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -42,15 +52,17 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
-// --- SISTEMA DE POSICIONAMIENTO ---
+// --- SISTEMA DE COORDENADAS (Adaptado para Zoom) ---
 function getPos(e) {
     const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
     const rect = canvas.getBoundingClientRect();
+    const sx = t.clientX - rect.left;
+    const sy = t.clientY - rect.top;
     return {
-        x: (t.clientX - rect.left) - camera.x,
-        y: (t.clientY - rect.top) - camera.y,
-        rx: t.clientX - rect.left,
-        ry: t.clientY - rect.top
+        x: (sx - camera.x) / camera.z,
+        y: (sy - camera.y) / camera.z,
+        rx: sx, // Pantalla Real X
+        ry: sy  // Pantalla Real Y
     };
 }
 
@@ -64,6 +76,16 @@ function obtenerHandles(el) {
 
 // --- EVENTOS DE INTERACCIÓN ---
 const start = e => {
+    // Detectar si son DOS DEDOS (Pinch to Zoom)
+    if(e.touches && e.touches.length === 2) {
+        isPanning = false; dibujando = false; seleccionado = null;
+        const t1 = e.touches[0], t2 = e.touches[1];
+        initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        initialCamZ = camera.z; initialCamX = camera.x; initialCamY = camera.y;
+        pinchCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
+        return;
+    }
+
     const p = getPos(e);
     
     // Pan con dedo o botón central
@@ -77,23 +99,20 @@ const start = e => {
 
     if(modo === 'select') {
         if(seleccionado) {
-            handleSeleccionado = obtenerHandles(seleccionado).find(h => Math.hypot(p.x - h.x, p.y - h.y) < 20);
+            // El hit detection se escala con la cámara para que siempre sea fácil tocar el handle
+            const radioAcierto = 20 / camera.z; 
+            handleSeleccionado = obtenerHandles(seleccionado).find(h => Math.hypot(p.x - h.x, p.y - h.y) < radioAcierto);
             if(handleSeleccionado) return;
         }
         
-        // Buscar objeto para seleccionar/arrastrar
         seleccionado = elementos.slice().reverse().find(el => {
-            if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < el.grosor + 10);
+            if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 10)/camera.z);
             const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
             return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
         });
 
-        if(seleccionado) {
-            seleccionado.ox = p.x - seleccionado.x;
-            seleccionado.oy = p.y - seleccionado.y;
-        }
-        render(); 
-        return;
+        if(seleccionado) { seleccionado.ox = p.x - seleccionado.x; seleccionado.oy = p.y - seleccionado.y; }
+        render(); return;
     }
 
     if(modo === 'text') {
@@ -105,24 +124,35 @@ const start = e => {
         return;
     }
 
-    // Dibujo nuevo
     dibujando = true;
     elementoActual = { 
         id: Math.random(), type: modo, x: p.x, y: p.y, w: 0, h: 0, 
-        color: controls.color.value, grosor: parseInt(controls.grosor.value), 
-        points: [{x:p.x, y:p.y}] 
+        color: controls.color.value, grosor: parseInt(controls.grosor.value), points: [{x:p.x, y:p.y}] 
     };
 };
 
 const move = e => {
+    // LÓGICA DE PINCH-TO-ZOOM (Móvil)
+    if(e.touches && e.touches.length === 2 && initialPinchDist) {
+        const t1 = e.touches[0], t2 = e.touches[1];
+        const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        let newZ = initialCamZ * (currentDist / initialPinchDist);
+        newZ = Math.max(0.1, Math.min(newZ, 10)); // Límite de Zoom (10% a 1000%)
+
+        const currentCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
+        camera.x = currentCenter.x - (pinchCenter.x - initialCamX) * (newZ / initialCamZ);
+        camera.y = currentCenter.y - (pinchCenter.y - initialCamY) * (newZ / initialCamZ);
+        camera.z = newZ;
+        render(); return;
+    }
+
     const p = getPos(e);
     if(!dibujando && !isPanning) socket.emit('mover_cursor', { x: p.x, y: p.y });
 
     if(isPanning) { 
         camera.x = p.rx - startPan.x; 
         camera.y = p.ry - startPan.y; 
-        render(); 
-        return; 
+        render(); return; 
     }
 
     if(dibujando && elementoActual) {
@@ -136,34 +166,65 @@ const move = e => {
             const h = handleSeleccionado.n, el = seleccionado;
             if(h.includes('r')) el.w = p.x - el.x; if(h.includes('l')) { el.w += el.x - p.x; el.x = p.x; }
             if(h.includes('b')) el.h = p.y - el.y; if(h.includes('t')) { el.h += el.y - p.y; el.y = p.y; }
+            cambioRealizado = true;
         } else if (e.buttons === 1 || e.touches) {
             seleccionado.x = p.x - seleccionado.ox; 
             seleccionado.y = p.y - seleccionado.oy;
+            cambioRealizado = true;
         }
         render();
     }
 };
 
-const end = () => {
-    if(dibujando) { 
+const end = e => {
+    if(e && e.touches && e.touches.length < 2) initialPinchDist = null;
+
+    if(dibujando && elementoActual) { 
         elementos.push(elementoActual); 
         socket.emit('dibujar', elementoActual); 
         guardarEstado(); 
-    } else if(seleccionado || modo === 'erase' || isPanning) { 
-        socket.emit('sync_todo', elementos); 
-        if(seleccionado) guardarEstado(); 
+        cambioRealizado = false;
+    } 
+    // EL FIX DEL BUG: Solo sincroniza si estamos cargados y algo se movió o borró de verdad
+    else if (cambioRealizado) { 
+        if(historialCargado) socket.emit('sync_todo', elementos); 
+        guardarEstado(); 
+        cambioRealizado = false;
     }
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null;
 };
 
+// --- MOUSE WHEEL (Zoom en PC) ---
+canvas.addEventListener('wheel', e => {
+    e.preventDefault(); // Evita scroll de la página
+    const zoomSensitivity = 0.001;
+    let newZ = camera.z * Math.exp(-e.deltaY * zoomSensitivity);
+    newZ = Math.max(0.1, Math.min(newZ, 10));
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // Ajusta la cámara para que el zoom vaya hacia el cursor
+    camera.x = mouseX - (mouseX - camera.x) * (newZ / camera.z);
+    camera.y = mouseY - (mouseY - camera.y) * (newZ / camera.z);
+    camera.z = newZ;
+    render();
+}, { passive: false });
+
 // --- FUNCIONES ADICIONALES ---
 function borrarEn(p) {
     const i = elementos.findLastIndex(el => {
-        if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < el.grosor + 15);
+        if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 15)/camera.z);
         const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
         return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
     });
-    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); render(); socket.emit('sync_todo', elementos); }
+    if(i !== -1) { 
+        elementos.splice(i, 1); 
+        guardarEstado(); 
+        render(); 
+        if(historialCargado) socket.emit('sync_todo', elementos); 
+    }
 }
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
@@ -210,18 +271,29 @@ function subirImagen(p) {
     i.click();
 }
 
-// --- RENDERIZADO ---
+// --- RENDERIZADO (Adaptado al Zoom) ---
 function render() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.save(); ctx.translate(camera.x, camera.y);
+    ctx.save(); 
+    ctx.translate(camera.x, camera.y);
+    ctx.scale(camera.z, camera.z); // <- APLICA EL ZOOM
     
-    // Cuadrícula infinita
-    ctx.strokeStyle = "#eee"; ctx.lineWidth = 1; ctx.beginPath();
+    // Cuadrícula que se adapta al zoom
+    const left = -camera.x / camera.z;
+    const top = -camera.y / camera.z;
+    const right = (canvas.width - camera.x) / camera.z;
+    const bottom = (canvas.height - camera.y) / camera.z;
+
+    ctx.strokeStyle = "#eee"; ctx.lineWidth = 1 / camera.z; ctx.beginPath();
     const step = 40;
-    for(let x=-camera.x-((-camera.x)%step); x<canvas.width-camera.x; x+=step){ ctx.moveTo(x,-camera.y); ctx.lineTo(x,canvas.height-camera.y); }
-    for(let y=-camera.y-((-camera.y)%step); y<canvas.height-camera.y; y+=step){ ctx.moveTo(-camera.x,y); ctx.lineTo(canvas.width-camera.x,y); }
+    const startX = left - (left % step) - step;
+    const startY = top - (top % step) - step;
+
+    for(let x = startX; x < right + step; x += step){ ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
+    for(let y = startY; y < bottom + step; y += step){ ctx.moveTo(left, y); ctx.lineTo(right, y); }
     ctx.stroke();
 
+    // Dibujar elementos
     [...elementos, elementoActual].forEach(el => {
         if(!el) return;
         ctx.strokeStyle = el.color; ctx.fillStyle = el.color; ctx.lineWidth = el.grosor; ctx.lineCap = "round";
@@ -232,10 +304,13 @@ function render() {
         else if(el.type==='text'){ ctx.font = "24px Arial"; ctx.textBaseline = "top"; ctx.fillText(el.text, el.x, el.y); }
         else if(el.type==='image' && el.imgObj) ctx.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
         
+        // Handles de selección
         if(modo==='select' && el === seleccionado && el.type !== 'pen'){
-            ctx.setLineDash([5,5]); ctx.strokeStyle = "#2196F3"; ctx.strokeRect(el.x-4, el.y-4, el.w+8, el.h+8);
+            ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z;
+            ctx.strokeRect(el.x, el.y, el.w, el.h);
             ctx.setLineDash([]); ctx.fillStyle = "#2196F3";
-            obtenerHandles(el).forEach(h => { ctx.beginPath(); ctx.arc(h.x, h.y, 6, 0, Math.PI*2); ctx.fill(); });
+            const hSize = 10 / camera.z; // Tamaño consistente sin importar el zoom
+            obtenerHandles(el).forEach(h => { ctx.fillRect(h.x - hSize/2, h.y - hSize/2, hSize, hSize); });
         }
     });
     ctx.restore();
@@ -264,24 +339,26 @@ socket.on('dibujar', o => {
     else { elementos.push(o); render(); }
 });
 socket.on('cargar_historial', h => {
-    elementos = h; elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src; el.imgObj.onload=render;}});
+    elementos = h; historialCargado = true; // Confirmamos que ya somos "seguros"
+    elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src; el.imgObj.onload=render;}});
     render(); if(historialUndo.length===0) guardarEstado();
 });
-socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0}; guardarEstado(); render(); });
+socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarEstado(); render(); });
 
 const cur = {};
 socket.on('mover_cursor', d => {
     if(!cur[d.id]){ const v=document.createElement('div'); v.className='cursor-fantasma'; document.getElementById('cursores').appendChild(v); cur[d.id]=v; }
-    cur[d.id].style.left=(d.x+camera.x)+'px'; cur[d.id].style.top=(d.y+camera.y)+'px';
+    // Escalar la posición del cursor remoto
+    cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; 
+    cur[d.id].style.top=(d.y * camera.z + camera.y)+'px';
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
 // --- INICIO ---
 canvas.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-canvas.addEventListener('touchstart', start, {passive:false});
-window.addEventListener('touchmove', move, {passive:false});
+canvas.addEventListener('touchstart', e=>{e.preventDefault(); start(e);}, {passive:false});
+window.addEventListener('touchmove', e=>{e.preventDefault(); move(e);}, {passive:false});
 window.addEventListener('touchend', end);
 
 window.onresize = () => { canvas.width=window.innerWidth; canvas.height=window.innerHeight; render(); };
-guardarEstado(); 
-render();
+guardarEstado(); render();
