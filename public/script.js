@@ -1,122 +1,170 @@
-const socket = io(); // Nos conectamos al servidor
-
+const socket = io();
 const canvas = document.getElementById('pizarra');
 const ctx = canvas.getContext('2d');
 
-// Ajustar el canvas al tamaño de la pantalla
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// Variables de estado
+let modo = 'select';
 let dibujando = false;
-let colorActual = '#000000';
-let grosorActual = 3;
-let modo = 'pen'; // 'pen' o 'erase'
-
-let xAnterior = 0;
-let yAnterior = 0;
+let elementos = []; // Aquí guardaremos todos los objetos (rects, fotos, etc.)
+let elementoActual = null;
+let seleccionado = null;
 
 // Configuración de herramientas
-document.getElementById('color-picker').addEventListener('input', (e) => colorActual = e.target.value);
-document.getElementById('width-slider').addEventListener('input', (e) => grosorActual = e.target.value);
+const controls = {
+    color: document.getElementById('color-picker'),
+    width: document.getElementById('width-slider')
+};
 
-document.getElementById('btn-pen').addEventListener('click', (e) => {
-    modo = 'pen';
-    e.target.classList.add('active');
-    document.getElementById('btn-erase').classList.remove('active');
-});
-
-document.getElementById('btn-erase').addEventListener('click', (e) => {
-    modo = 'erase';
-    e.target.classList.add('active');
-    document.getElementById('btn-pen').classList.remove('active');
-});
-
-// Función central para trazar una línea
-function trazarLinea(x0, y0, x1, y1, color, grosor, esBorrador) {
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.lineTo(x1, y1);
-    ctx.strokeStyle = esBorrador ? 'white' : color;
-    ctx.lineWidth = grosor;
-    ctx.lineCap = 'round';
-    ctx.stroke();
-    ctx.closePath();
-}
-
-// ---- EVENTOS DEL MOUSE (MI DIBUJO) ----
-canvas.addEventListener('mousedown', (e) => {
-    dibujando = true;
-    xAnterior = e.clientX;
-    yAnterior = e.clientY;
-});
-
-canvas.addEventListener('mousemove', (e) => {
-    // 1. Enviar siempre mi posición para el cursor fantasma
-    socket.emit('mover_cursor', { x: e.clientX, y: e.clientY });
-
-    // 2. Si estoy dibujando, trazar y enviar la línea
-    if (dibujando) {
-        const xActual = e.clientX;
-        const yActual = e.clientY;
-        const esBorrador = (modo === 'erase');
-
-        // Dibujo en mi pantalla
-        trazarLinea(xAnterior, yAnterior, xActual, yActual, colorActual, grosorActual, esBorrador);
-
-        // Envío los datos de esta línea al servidor
-        socket.emit('dibujar', {
-            x0: xAnterior, y0: yAnterior,
-            x1: xActual, y1: yActual,
-            color: colorActual,
-            grosor: grosorActual,
-            borrador: esBorrador
-        });
-
-        xAnterior = xActual;
-        yAnterior = yActual;
-    }
-});
-
-canvas.addEventListener('mouseup', () => dibujando = false);
-canvas.addEventListener('mouseout', () => dibujando = false);
-
-
-// ---- RECEPCIÓN DEL SERVIDOR (MULTIJUGADOR) ----
-
-// Cuando entro, el servidor me manda lo que ya estaba dibujado
-socket.on('cargar_historial', (historial) => {
-    historial.forEach(linea => {
-        trazarLinea(linea.x0, linea.y0, linea.x1, linea.y1, linea.color, linea.grosor, linea.borrador);
+// --- CAMBIO DE MODOS ---
+document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        if(btn.id === 'btn-export') { exportarJPG(); return; }
+        if(btn.id === 'btn-image') { subirImagen(); return; }
+        
+        document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        modo = btn.id.replace('btn-', '');
     });
 });
 
-// Cuando alguien dibuja en tiempo real
-socket.on('dibujar', (datos) => {
-    trazarLinea(datos.x0, datos.y0, datos.x1, datos.y1, datos.color, datos.grosor, datos.borrador);
+// --- LÓGICA DE DIBUJO Y OBJETOS ---
+canvas.addEventListener('mousedown', e => {
+    const { x, y } = getPos(e);
+    
+    if (modo === 'select') {
+        seleccionado = elementos.findLast(el => x > el.x && x < el.x + el.w && y > el.y && y < el.y + el.h);
+    } else if (modo !== 'erase') {
+        dibujando = true;
+        elementoActual = {
+            id: Math.random().toString(36).substr(2, 9),
+            type: modo,
+            x: x, y: y, w: 0, h: 0,
+            color: controls.color.value,
+            width: parseInt(controls.width.value),
+            points: modo === 'pen' ? [{x, y}] : []
+        };
+    }
 });
 
-// ---- CURSORES FANTASMA ----
-const contenedorCursores = document.getElementById('cursores');
-const cursoresActivos = {};
+canvas.addEventListener('mousemove', e => {
+    const { x, y } = getPos(e);
+    socket.emit('mover_cursor', { x, y });
 
-socket.on('mover_cursor', (datos) => {
-    // Si el cursor de este usuario no existe, lo creamos
-    if (!cursoresActivos[datos.id]) {
-        const nuevoCursor = document.createElement('div');
-        nuevoCursor.classList.add('cursor-fantasma');
-        contenedorCursores.appendChild(nuevoCursor);
-        cursoresActivos[datos.id] = nuevoCursor;
+    if (dibujando && elementoActual) {
+        if (modo === 'pen') {
+            elementoActual.points.push({x, y});
+        } else {
+            elementoActual.w = x - elementoActual.x;
+            elementoActual.h = y - elementoActual.y;
+        }
+        render();
     }
-    // Movemos el div a la posición X e Y
-    cursoresActivos[datos.id].style.left = datos.x + 'px';
-    cursoresActivos[datos.id].style.top = datos.y + 'px';
+    
+    if (modo === 'select' && seleccionado && e.buttons === 1) {
+        seleccionado.x = x - seleccionado.w / 2;
+        seleccionado.y = y - seleccionado.h / 2;
+        render();
+    }
 });
 
-// Si un usuario se va, borramos su punto rojo
-socket.on('borrar_cursor', (id) => {
-    if (cursoresActivos[id]) {
-        cursoresActivos[id].remove();
-        delete cursoresActivos[id];
+canvas.addEventListener('mouseup', () => {
+    if (dibujando && elementoActual) {
+        elementos.push(elementoActual);
+        socket.emit('dibujar', elementoActual);
     }
+    dibujando = false;
+    elementoActual = null;
+});
+
+// --- RENDERIZADO ---
+function render() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    [...elementos, elementoActual].forEach(el => {
+        if (!el) return;
+        ctx.strokeStyle = el.color;
+        ctx.lineWidth = el.width;
+        ctx.lineCap = 'round';
+
+        if (el.type === 'pen') {
+            ctx.beginPath();
+            el.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.stroke();
+        } else if (el.type === 'rect') {
+            ctx.strokeRect(el.x, el.y, el.w, el.h);
+        } else if (el.type === 'ellipse') {
+            ctx.beginPath();
+            ctx.ellipse(el.x + el.w/2, el.y + el.h/2, Math.abs(el.w/2), Math.abs(el.h/2), 0, 0, Math.PI*2);
+            ctx.stroke();
+        } else if (el.type === 'image' && el.imgObj) {
+            ctx.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
+        }
+    });
+}
+
+// --- FUNCIONES EXTRA ---
+function getPos(e) { return { x: e.clientX, y: e.clientY }; }
+
+function subirImagen() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = e => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = event => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const item = { type: 'image', x: 100, y: 100, w: img.width/2, h: img.height/2, src: img.src };
+                elementos.push(item);
+                item.imgObj = img;
+                socket.emit('dibujar', item);
+                render();
+            };
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
+
+function exportarJPG() {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = canvas.width;
+    tempCanvas.height = canvas.height;
+    const tCtx = tempCanvas.getContext('2d');
+    tCtx.fillStyle = "white";
+    tCtx.fillRect(0,0, tempCanvas.width, tempCanvas.height);
+    tCtx.drawImage(canvas, 0, 0);
+    const link = document.createElement('a');
+    link.download = 'mi-dibujo.jpg';
+    link.href = tempCanvas.toDataURL('image/jpeg', 0.9);
+    link.click();
+}
+
+// Red (Sincronización)
+socket.on('dibujar', (obj) => {
+    if (obj.type === 'image') {
+        const img = new Image();
+        img.src = obj.src;
+        img.onload = () => { obj.imgObj = img; elementos.push(obj); render(); };
+    } else {
+        elementos.push(obj);
+        render();
+    }
+});
+
+socket.on('cargar_historial', (h) => {
+    h.forEach(el => {
+        if (el.type === 'image') {
+            const img = new Image();
+            img.src = el.src;
+            img.onload = () => { el.imgObj = img; elementos.push(el); render(); };
+        } else {
+            elementos.push(el);
+        }
+    });
+    setTimeout(render, 500);
 });
