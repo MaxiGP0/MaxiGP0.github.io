@@ -1,4 +1,13 @@
-const socket = io();
+// 1. PEDIR CONTRASEÑA ANTES DE ENTRAR
+const pass = prompt("🔐 Ingresa la contraseña secreta para entrar al cuaderno:");
+const socket = io({ auth: { password: pass } });
+
+// Si el servidor rechaza la contraseña...
+socket.on('connect_error', (err) => {
+    alert("❌ " + err.message);
+    window.location.reload(); // Recargamos la página para volver a pedirla
+});
+
 const canvas = document.getElementById('pizarra');
 const ctx = canvas.getContext('2d');
 canvas.width = window.innerWidth;
@@ -13,7 +22,26 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- MEMORIA ---
+// --- ⚡ SISTEMA THROTTLING (Optimización de Red) ---
+function throttle(func, limit) {
+    let inThrottle;
+    return function() {
+        const args = arguments;
+        const context = this;
+        if (!inThrottle) {
+            func.apply(context, args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    }
+}
+
+// En lugar de enviar la posición todo el tiempo, solo lo permite 1 vez cada 50 milisegundos
+const enviarCursor = throttle((x, y) => {
+    socket.emit('mover_cursor', { x, y });
+}, 50); 
+// ----------------------------------------------------
+
 function guardarEstado() {
     const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; }));
     historialUndo.push(snap);
@@ -28,7 +56,6 @@ function aplicarEstado(s) {
     if(historialCargado) socket.emit('sync_todo', elementos);
 }
 
-// --- BOTONES ---
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.addEventListener('click', () => {
         const id = btn.id;
@@ -46,12 +73,10 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
-// --- SISTEMA DE COORDENADAS ---
 function getPos(e) {
     const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
     const rect = canvas.getBoundingClientRect();
-    const sx = t.clientX - rect.left;
-    const sy = t.clientY - rect.top;
+    const sx = t.clientX - rect.left, sy = t.clientY - rect.top;
     return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
 }
 
@@ -63,7 +88,6 @@ function obtenerHandles(el) {
     ];
 }
 
-// --- EVENTOS DE INTERACCIÓN ---
 const start = e => {
     if(e.touches && e.touches.length === 2) {
         isPanning = false; dibujando = false; seleccionado = null;
@@ -126,7 +150,9 @@ const move = e => {
     }
 
     const p = getPos(e);
-    if(!dibujando && !isPanning) socket.emit('mover_cursor', { x: p.x, y: p.y });
+    
+    // USAMOS EL THROTTLE AQUÍ PARA AHORRAR INTERNET
+    if(!dibujando && !isPanning) enviarCursor(p.x, p.y); 
 
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; render(); return; }
 
@@ -164,7 +190,6 @@ const end = e => {
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null;
 };
 
-// --- MOUSE WHEEL (Zoom en PC) ---
 canvas.addEventListener('wheel', e => {
     e.preventDefault(); 
     const zoomSensitivity = 0.001;
@@ -179,7 +204,6 @@ canvas.addEventListener('wheel', e => {
     camera.z = newZ; render();
 }, { passive: false });
 
-// --- FUNCIONES ADICIONALES ---
 function borrarEn(p) {
     const i = elementos.findLastIndex(el => {
         if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 15)/camera.z);
@@ -231,7 +255,6 @@ function subirImagen(p) {
     i.click();
 }
 
-// --- RENDERIZADO ---
 function render() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.save(); ctx.translate(camera.x, camera.y); ctx.scale(camera.z, camera.z);
@@ -267,7 +290,6 @@ function render() {
     ctx.restore();
 }
 
-// --- TECLADO ---
 window.addEventListener('keydown', e => {
     if(e.ctrlKey && e.key === 'z') { e.preventDefault(); 
         if (historialUndo.length > 1) { historialRedo.push(historialUndo.pop()); aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1])); }
@@ -277,7 +299,6 @@ window.addEventListener('keydown', e => {
     }
 });
 
-// --- SOCKETS ---
 socket.on('dibujar', o => {
     if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); render();}; }
     else { elementos.push(o); render(); }
@@ -296,29 +317,18 @@ socket.on('mover_cursor', d => {
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
-// --- INICIO (CON FIX PARA SCROLL DE TOOLBAR EN MÓVILES) ---
 canvas.addEventListener('mousedown', start); 
 window.addEventListener('mousemove', e => {
-    // Evitar interacciones de canvas si el mouse está sobre la barra
     if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado) return;
     move(e);
 }); 
 window.addEventListener('mouseup', end);
 
-canvas.addEventListener('touchstart', e => { 
-    e.preventDefault(); // Mantiene el bloqueo en el canvas
-    start(e); 
-}, {passive:false});
-
+canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 window.addEventListener('touchmove', e => { 
-    // MÁGIA: Si tocas la barra de herramientas y no estás dibujando, permítele hacer scroll nativo
-    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado && !handleSeleccionado) {
-        return; 
-    }
-    if (e.cancelable) e.preventDefault(); 
-    move(e); 
+    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado && !handleSeleccionado) return; 
+    if (e.cancelable) e.preventDefault(); move(e); 
 }, {passive:false});
-
 window.addEventListener('touchend', end);
 
 window.onresize = () => { canvas.width=window.innerWidth; canvas.height=window.innerHeight; render(); };
