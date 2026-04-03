@@ -3,40 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cuaderno Digital Pro Web</title>
+    <title>Cuaderno Digital Pro</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="toolbar">
-        <button id="btn-select" class="active" title="Seleccionar/Mover/Resize">👆</button>
-        <button id="btn-pan" title="Mover Lienzo (Mano)">🖐️</button>
-        <button id="btn-pen" title="Lápiz">✏️</button>
-        <button id="btn-line" title="Línea Recta">📏</button>
-        <button id="btn-rect" title="Rectángulo">⬜</button>
-        <button id="btn-ellipse" title="Círculo/Elipse">⭕</button>
-        <button id="btn-text" title="Texto">📝</button>
-        <button id="btn-image" title="Insertar Imagen">🖼️</button>
-        <button id="btn-erase" title="Borrador">🧽</button>
-        
-        <div class="separator"></div>
-        
-        <input type="color" id="color-picker" value="#000000" title="Color">
-        <div class="grosor-container">
-            <span style="font-size:12px">Grosor:</span>
-            <input type="range" id="width-slider" min="1" max="25" value="3" title="Grosor de línea">
-        </div>
-        
-        <div class="separator"></div>
-        
-        <button id="btn-export" title="Exportar como JPG">📸</button>
-        <button id="btn-save" title="Descargar Proyecto (.json)">💾</button>
-        <button id="btn-load" title="Cargar Proyecto (.json)">📂</button>
-        <button id="btn-clear" title="Reiniciar todo el lienzo" style="color: red;">🗑️</button>
+        <button id="btn-select" class="active">👆</button>
+        <button id="btn-pan">🖐️</button>
+        <button id="btn-pen">✏️</button>
+        <button id="btn-line">📏</button>
+        <button id="btn-rect">⬜</button>
+        <button id="btn-ellipse">⭕</button>
+        <button id="btn-text">📝</button>
+        <button id="btn-image">🖼️</button>
+        <button id="btn-erase">🧽</button>
+        <div class="sep"></div>
+        <input type="color" id="color-picker" value="#000000">
+        <input type="range" id="width-slider" min="1" max="25" value="3">
+        <div class="sep"></div>
+        <button id="btn-export">📸</button>
+        <button id="btn-save">💾</button>
+        <button id="btn-load">📂</button>
+        <button id="btn-clear" style="color:red">🗑️</button>
     </div>
-    
     <canvas id="pizarra"></canvas>
     <div id="cursores"></div>
-
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
