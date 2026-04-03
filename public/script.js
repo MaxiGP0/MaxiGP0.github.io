@@ -5,16 +5,10 @@ canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
 let modo = 'select', elementos = [], dibujando = false, seleccionado = null, elementoActual = null;
-
-// CÁMARA: Ahora incluye 'z' para el Zoom (1 = 100%)
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 let handleSeleccionado = null, historialUndo = [], historialRedo = [];
 
-// VARIABLES ANTI-BUG (Evita borrar todo al entrar desde celular)
-let historialCargado = false;
-let cambioRealizado = false; 
-
-// VARIABLES PARA ZOOM EN CELULAR (Pinch)
+let historialCargado = false, cambioRealizado = false; 
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
@@ -52,18 +46,13 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
-// --- SISTEMA DE COORDENADAS (Adaptado para Zoom) ---
+// --- SISTEMA DE COORDENADAS ---
 function getPos(e) {
     const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
     const rect = canvas.getBoundingClientRect();
     const sx = t.clientX - rect.left;
     const sy = t.clientY - rect.top;
-    return {
-        x: (sx - camera.x) / camera.z,
-        y: (sy - camera.y) / camera.z,
-        rx: sx, // Pantalla Real X
-        ry: sy  // Pantalla Real Y
-    };
+    return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
 }
 
 function obtenerHandles(el) {
@@ -76,7 +65,6 @@ function obtenerHandles(el) {
 
 // --- EVENTOS DE INTERACCIÓN ---
 const start = e => {
-    // Detectar si son DOS DEDOS (Pinch to Zoom)
     if(e.touches && e.touches.length === 2) {
         isPanning = false; dibujando = false; seleccionado = null;
         const t1 = e.touches[0], t2 = e.touches[1];
@@ -87,19 +75,11 @@ const start = e => {
     }
 
     const p = getPos(e);
-    
-    // Pan con dedo o botón central
-    if(modo === 'pan' || e.button === 1) { 
-        isPanning = true; 
-        startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; 
-        return; 
-    }
-
+    if(modo === 'pan' || e.button === 1) { isPanning = true; startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; return; }
     if(modo === 'erase') { borrarEn(p); return; }
 
     if(modo === 'select') {
         if(seleccionado) {
-            // El hit detection se escala con la cámara para que siempre sea fácil tocar el handle
             const radioAcierto = 20 / camera.z; 
             handleSeleccionado = obtenerHandles(seleccionado).find(h => Math.hypot(p.x - h.x, p.y - h.y) < radioAcierto);
             if(handleSeleccionado) return;
@@ -132,12 +112,11 @@ const start = e => {
 };
 
 const move = e => {
-    // LÓGICA DE PINCH-TO-ZOOM (Móvil)
     if(e.touches && e.touches.length === 2 && initialPinchDist) {
         const t1 = e.touches[0], t2 = e.touches[1];
         const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         let newZ = initialCamZ * (currentDist / initialPinchDist);
-        newZ = Math.max(0.1, Math.min(newZ, 10)); // Límite de Zoom (10% a 1000%)
+        newZ = Math.max(0.1, Math.min(newZ, 10));
 
         const currentCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
         camera.x = currentCenter.x - (pinchCenter.x - initialCamX) * (newZ / initialCamZ);
@@ -149,11 +128,7 @@ const move = e => {
     const p = getPos(e);
     if(!dibujando && !isPanning) socket.emit('mover_cursor', { x: p.x, y: p.y });
 
-    if(isPanning) { 
-        camera.x = p.rx - startPan.x; 
-        camera.y = p.ry - startPan.y; 
-        render(); return; 
-    }
+    if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; render(); return; }
 
     if(dibujando && elementoActual) {
         if(modo === 'pen') elementoActual.points.push({x: p.x, y: p.y});
@@ -180,36 +155,28 @@ const end = e => {
     if(e && e.touches && e.touches.length < 2) initialPinchDist = null;
 
     if(dibujando && elementoActual) { 
-        elementos.push(elementoActual); 
-        socket.emit('dibujar', elementoActual); 
-        guardarEstado(); 
-        cambioRealizado = false;
-    } 
-    // EL FIX DEL BUG: Solo sincroniza si estamos cargados y algo se movió o borró de verdad
-    else if (cambioRealizado) { 
+        elementos.push(elementoActual); socket.emit('dibujar', elementoActual); 
+        guardarEstado(); cambioRealizado = false;
+    } else if (cambioRealizado) { 
         if(historialCargado) socket.emit('sync_todo', elementos); 
-        guardarEstado(); 
-        cambioRealizado = false;
+        guardarEstado(); cambioRealizado = false;
     }
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null;
 };
 
 // --- MOUSE WHEEL (Zoom en PC) ---
 canvas.addEventListener('wheel', e => {
-    e.preventDefault(); // Evita scroll de la página
+    e.preventDefault(); 
     const zoomSensitivity = 0.001;
     let newZ = camera.z * Math.exp(-e.deltaY * zoomSensitivity);
     newZ = Math.max(0.1, Math.min(newZ, 10));
 
     const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
 
-    // Ajusta la cámara para que el zoom vaya hacia el cursor
     camera.x = mouseX - (mouseX - camera.x) * (newZ / camera.z);
     camera.y = mouseY - (mouseY - camera.y) * (newZ / camera.z);
-    camera.z = newZ;
-    render();
+    camera.z = newZ; render();
 }, { passive: false });
 
 // --- FUNCIONES ADICIONALES ---
@@ -219,23 +186,16 @@ function borrarEn(p) {
         const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
         return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
     });
-    if(i !== -1) { 
-        elementos.splice(i, 1); 
-        guardarEstado(); 
-        render(); 
-        if(historialCargado) socket.emit('sync_todo', elementos); 
-    }
+    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); render(); if(historialCargado) socket.emit('sync_todo', elementos); }
 }
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
 
 function exportarJPG() {
     seleccionado = null; render();
-    const temp = document.createElement('canvas'); 
-    temp.width = canvas.width; temp.height = canvas.height;
+    const temp = document.createElement('canvas'); temp.width = canvas.width; temp.height = canvas.height;
     const t = temp.getContext('2d');
-    t.fillStyle = "white"; t.fillRect(0,0,temp.width,temp.height);
-    t.drawImage(canvas, 0, 0);
+    t.fillStyle = "white"; t.fillRect(0,0,temp.width,temp.height); t.drawImage(canvas, 0, 0);
     const a = document.createElement('a'); a.download = 'dibujo.jpg'; a.href = temp.toDataURL('image/jpeg'); a.click();
 }
 
@@ -271,29 +231,21 @@ function subirImagen(p) {
     i.click();
 }
 
-// --- RENDERIZADO (Adaptado al Zoom) ---
+// --- RENDERIZADO ---
 function render() {
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.save(); 
-    ctx.translate(camera.x, camera.y);
-    ctx.scale(camera.z, camera.z); // <- APLICA EL ZOOM
+    ctx.save(); ctx.translate(camera.x, camera.y); ctx.scale(camera.z, camera.z);
     
-    // Cuadrícula que se adapta al zoom
-    const left = -camera.x / camera.z;
-    const top = -camera.y / camera.z;
-    const right = (canvas.width - camera.x) / camera.z;
-    const bottom = (canvas.height - camera.y) / camera.z;
+    const left = -camera.x / camera.z, top = -camera.y / camera.z;
+    const right = (canvas.width - camera.x) / camera.z, bottom = (canvas.height - camera.y) / camera.z;
 
     ctx.strokeStyle = "#eee"; ctx.lineWidth = 1 / camera.z; ctx.beginPath();
-    const step = 40;
-    const startX = left - (left % step) - step;
-    const startY = top - (top % step) - step;
+    const step = 40, startX = left - (left % step) - step, startY = top - (top % step) - step;
 
     for(let x = startX; x < right + step; x += step){ ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
     for(let y = startY; y < bottom + step; y += step){ ctx.moveTo(left, y); ctx.lineTo(right, y); }
     ctx.stroke();
 
-    // Dibujar elementos
     [...elementos, elementoActual].forEach(el => {
         if(!el) return;
         ctx.strokeStyle = el.color; ctx.fillStyle = el.color; ctx.lineWidth = el.grosor; ctx.lineCap = "round";
@@ -304,12 +256,11 @@ function render() {
         else if(el.type==='text'){ ctx.font = "24px Arial"; ctx.textBaseline = "top"; ctx.fillText(el.text, el.x, el.y); }
         else if(el.type==='image' && el.imgObj) ctx.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
         
-        // Handles de selección
         if(modo==='select' && el === seleccionado && el.type !== 'pen'){
             ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z;
             ctx.strokeRect(el.x, el.y, el.w, el.h);
             ctx.setLineDash([]); ctx.fillStyle = "#2196F3";
-            const hSize = 10 / camera.z; // Tamaño consistente sin importar el zoom
+            const hSize = 10 / camera.z; 
             obtenerHandles(el).forEach(h => { ctx.fillRect(h.x - hSize/2, h.y - hSize/2, hSize, hSize); });
         }
     });
@@ -319,17 +270,10 @@ function render() {
 // --- TECLADO ---
 window.addEventListener('keydown', e => {
     if(e.ctrlKey && e.key === 'z') { e.preventDefault(); 
-        if (historialUndo.length > 1) {
-            historialRedo.push(historialUndo.pop());
-            aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1]));
-        }
+        if (historialUndo.length > 1) { historialRedo.push(historialUndo.pop()); aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1])); }
     }
     if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); 
-        if (historialRedo.length > 0) {
-            const p = JSON.parse(historialRedo.pop());
-            historialUndo.push(JSON.stringify(p));
-            aplicarEstado(p);
-        }
+        if (historialRedo.length > 0) { const p = JSON.parse(historialRedo.pop()); historialUndo.push(JSON.stringify(p)); aplicarEstado(p); }
     }
 });
 
@@ -339,7 +283,7 @@ socket.on('dibujar', o => {
     else { elementos.push(o); render(); }
 });
 socket.on('cargar_historial', h => {
-    elementos = h; historialCargado = true; // Confirmamos que ya somos "seguros"
+    elementos = h; historialCargado = true;
     elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src; el.imgObj.onload=render;}});
     render(); if(historialUndo.length===0) guardarEstado();
 });
@@ -348,16 +292,33 @@ socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarE
 const cur = {};
 socket.on('mover_cursor', d => {
     if(!cur[d.id]){ const v=document.createElement('div'); v.className='cursor-fantasma'; document.getElementById('cursores').appendChild(v); cur[d.id]=v; }
-    // Escalar la posición del cursor remoto
-    cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; 
-    cur[d.id].style.top=(d.y * camera.z + camera.y)+'px';
+    cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; cur[d.id].style.top=(d.y * camera.z + camera.y)+'px';
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
-// --- INICIO ---
-canvas.addEventListener('mousedown', start); window.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
-canvas.addEventListener('touchstart', e=>{e.preventDefault(); start(e);}, {passive:false});
-window.addEventListener('touchmove', e=>{e.preventDefault(); move(e);}, {passive:false});
+// --- INICIO (CON FIX PARA SCROLL DE TOOLBAR EN MÓVILES) ---
+canvas.addEventListener('mousedown', start); 
+window.addEventListener('mousemove', e => {
+    // Evitar interacciones de canvas si el mouse está sobre la barra
+    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado) return;
+    move(e);
+}); 
+window.addEventListener('mouseup', end);
+
+canvas.addEventListener('touchstart', e => { 
+    e.preventDefault(); // Mantiene el bloqueo en el canvas
+    start(e); 
+}, {passive:false});
+
+window.addEventListener('touchmove', e => { 
+    // MÁGIA: Si tocas la barra de herramientas y no estás dibujando, permítele hacer scroll nativo
+    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado && !handleSeleccionado) {
+        return; 
+    }
+    if (e.cancelable) e.preventDefault(); 
+    move(e); 
+}, {passive:false});
+
 window.addEventListener('touchend', end);
 
 window.onresize = () => { canvas.width=window.innerWidth; canvas.height=window.innerHeight; render(); };
