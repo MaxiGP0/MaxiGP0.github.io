@@ -1,30 +1,47 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+// Configuramos CORS para evitar problemas de conexión
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
-// Le decimos al servidor que sirva los archivos de la carpeta "public"
 app.use(express.static('public'));
 
-// Guardamos el historial de líneas para los que entran tarde
 let historialDibujos = [];
 
 io.on('connection', (socket) => {
-    console.log('🟢 Un usuario se ha conectado: ' + socket.id);
+    console.log('🟢 Usuario conectado: ' + socket.id);
 
-    // Cuando alguien entra, le enviamos todo el historial
+    // Enviar historial al nuevo usuario
     socket.emit('cargar_historial', historialDibujos);
 
-    // Cuando recibimos un trazo, lo guardamos y lo reenviamos a todos
+    // Recibir nuevo objeto y retransmitir
     socket.on('dibujar', (datos) => {
         historialDibujos.push(datos);
-        socket.broadcast.emit('dibujar', datos); // broadcast = enviar a todos menos al que dibujó
+        socket.broadcast.emit('dibujar', datos);
     });
 
-    // Cuando alguien mueve el ratón, reenviamos su posición
+    // Recibir actualización de todo el tablero (para mover/resize/borrar)
+    socket.on('sync_todo', (nuevoHistorial) => {
+        historialDibujos = nuevoHistorial;
+        socket.broadcast.emit('cargar_historial', historialDibujos);
+    });
+
+    // Recibir orden de limpiar todo
+    socket.on('limpiar_todo', () => {
+        historialDibujos = [];
+        // Avisar a TODOS, incluido el que mandó la orden
+        io.emit('limpiar_todo');
+    });
+
     socket.on('mover_cursor', (datos) => {
         socket.broadcast.emit('mover_cursor', { id: socket.id, x: datos.x, y: datos.y });
     });
@@ -37,5 +54,5 @@ io.on('connection', (socket) => {
 
 const PUERTO = process.env.PORT || 3000;
 server.listen(PUERTO, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${PUERTO}`);
+    console.log(`🚀 Servidor multijugador en http://localhost:${PUERTO}`);
 });
