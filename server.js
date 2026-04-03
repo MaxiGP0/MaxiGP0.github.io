@@ -12,7 +12,20 @@ app.use(express.static('public'));
 
 let historialDibujos = [];
 
+// 🔐 LA CONTRASEÑA SECRETA DE TU SALA
+const PASSWORD_SALA = "maxigp01"; // <-- CÁMBIALA POR LA QUE TÚ QUIERAS
+
+// EL GUARDIA DE SEGURIDAD (Filtro antes de conectar)
+io.use((socket, next) => {
+    const password = socket.handshake.auth.password;
+    if (password === PASSWORD_SALA) {
+        return next(); // Contraseña correcta, pasa.
+    }
+    return next(new Error("Contraseña incorrecta")); // Contraseña mala, lo patea.
+});
+
 io.on('connection', (socket) => {
+    // Si llegó hasta aquí, es porque puso bien la contraseña
     socket.emit('cargar_historial', historialDibujos);
 
     socket.on('dibujar', (datos) => {
@@ -41,5 +54,5 @@ io.on('connection', (socket) => {
 
 const PUERTO = process.env.PORT || 3000;
 server.listen(PUERTO, () => {
-    console.log(`Servidor en puerto ${PUERTO}`);
+    console.log(`🚀 Servidor en puerto ${PUERTO}`);
 });
