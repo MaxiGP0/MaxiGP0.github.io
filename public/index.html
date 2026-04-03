@@ -8,19 +8,23 @@
 </head>
 <body>
     <div id="toolbar">
-        <button id="btn-select" class="active">👆</button>
-        <button id="btn-pan">🖐️</button>
-        <button id="btn-pen">✏️</button>
-        <button id="btn-rect">⬜</button>
-        <button id="btn-text">📝</button>
-        <button id="btn-image">🖼️</button>
-        <button id="btn-erase">🧽</button>
+        <button id="btn-select" class="active" title="Seleccionar">👆</button>
+        <button id="btn-pan" title="Mover Lienzo">🖐️</button>
+        <button id="btn-pen" title="Lápiz">✏️</button>
+        <button id="btn-rect" title="Cuadrado">⬜</button>
+        <button id="btn-text" title="Texto">📝</button>
+        <button id="btn-image" title="Imagen">🖼️</button>
+        <button id="btn-erase" title="Goma">🧽</button>
         <input type="color" id="color-picker" value="#000000">
-        <button id="btn-export">📸</button>
-        <button id="btn-save">💾</button>
+        <button id="btn-export" title="Exportar JPG">📸</button>
+        <button id="btn-save" title="Guardar Proyecto">💾</button>
+        <button id="btn-load" title="Cargar Proyecto">📂</button>
+        <button id="btn-clear" title="Reiniciar Lienzo" style="color: red;">🗑️</button>
     </div>
+    
     <canvas id="pizarra"></canvas>
     <div id="cursores"></div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
