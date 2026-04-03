@@ -3,31 +3,37 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cuaderno Digital Pro</title>
+    <title>Cuaderno Pro Multiplayer</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="toolbar">
-        <button id="btn-select" class="active">👆</button>
-        <button id="btn-pan">🖐️</button>
-        <button id="btn-pen">✏️</button>
-        <button id="btn-line">📏</button>
-        <button id="btn-rect">⬜</button>
-        <button id="btn-ellipse">⭕</button>
-        <button id="btn-text">📝</button>
-        <button id="btn-image">🖼️</button>
-        <button id="btn-erase">🧽</button>
-        <div class="sep"></div>
-        <input type="color" id="color-picker" value="#000000">
-        <input type="range" id="width-slider" min="1" max="25" value="3">
-        <div class="sep"></div>
-        <button id="btn-export">📸</button>
-        <button id="btn-save">💾</button>
-        <button id="btn-load">📂</button>
-        <button id="btn-clear" style="color:red">🗑️</button>
-    </div>
+    <nav id="toolbar-container">
+        <div id="toolbar">
+            <button id="btn-select" class="active" title="Mover/Resize">👆</button>
+            <button id="btn-pan" title="Mover Lienzo">🖐️</button>
+            <button id="btn-pen" title="Lápiz">✏️</button>
+            <button id="btn-line" title="Línea">📏</button>
+            <button id="btn-rect" title="Cuadrado">⬜</button>
+            <button id="btn-ellipse" title="Círculo">⭕</button>
+            <button id="btn-text" title="Texto">📝</button>
+            <button id="btn-image" title="Imagen">🖼️</button>
+            <button id="btn-erase" title="Goma">🧽</button>
+            <div class="sep"></div>
+            <input type="color" id="color-picker" value="#000000">
+            <div class="slider-box">
+                <input type="range" id="width-slider" min="1" max="25" value="3">
+            </div>
+            <div class="sep"></div>
+            <button id="btn-export">📸</button>
+            <button id="btn-save">💾</button>
+            <button id="btn-load">📂</button>
+            <button id="btn-clear" style="color:red">🗑️</button>
+        </div>
+    </nav>
+
     <canvas id="pizarra"></canvas>
     <div id="cursores"></div>
+
     <script src="/socket.io/socket.io.js"></script>
     <script src="script.js"></script>
 </body>
