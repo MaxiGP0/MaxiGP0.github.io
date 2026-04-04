@@ -1,6 +1,20 @@
-const pass = prompt("🔐 Contraseña:");
+// --- NUEVO: SISTEMA DE RUTAS Y SALAS ---
+// Leemos la URL para ver si el usuario escribió "?sala=algo"
+const urlParams = new URLSearchParams(window.location.search);
+let miSala = urlParams.get('sala');
+
+// Si entró a la página principal sin sala, le creamos un código aleatorio y lo redirigimos
+if (!miSala) {
+    miSala = Math.random().toString(36).substr(2, 6); // ej: "x8a9pq"
+    window.location.href = `?sala=${miSala}`;
+}
+
+// Ahora la alerta le avisa en qué sala está entrando
+const pass = prompt(`🚪 Entrando a la sala: [ ${miSala} ]\n🔐 Contraseña:`);
 const miNombre = prompt("👤 Tu nombre:") || "Anónimo";
-const socket = io({ auth: { password: pass } });
+
+// Le enviamos al servidor la contraseña y el nombre de la sala que queremos
+const socket = io({ auth: { password: pass, salaId: miSala } });
 
 socket.on('connect_error', (err) => { alert("❌ " + err.message); window.location.reload(); });
 
@@ -26,7 +40,6 @@ function guardarEstado() {
     historialRedo = []; 
 }
 
-// FIX: Aplicar Estado (Recarga imágenes correctamente)
 function aplicarEstado(snapshotJSON) {
     if (!snapshotJSON) return;
     const data = typeof snapshotJSON === 'string' ? JSON.parse(snapshotJSON) : snapshotJSON;
@@ -36,7 +49,7 @@ function aplicarEstado(snapshotJSON) {
     elementos.forEach(el => { 
         if(el.type === 'image' && el.src){ 
             el.imgObj = new Image(); 
-            el.imgObj.onload = pedirRender; // Obliga a redibujar cuando la imagen esté lista
+            el.imgObj.onload = pedirRender; 
             el.imgObj.src = el.src; 
         }
     });
@@ -265,40 +278,18 @@ function borrarEn(p) {
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
 
-// FIX: Guardado y Cargado a prueba de fallos
 function guardarLocal() { 
     const blob = new Blob([JSON.stringify(elementos.map(el=>{const {imgObj,...r}=el; return r;}))], {type:"application/json"}); 
-    const a = document.createElement('a'); 
-    a.href = URL.createObjectURL(blob); 
-    a.download = "Pizarra_Proyecto.json"; 
-    document.body.appendChild(a); // Vital para que funcione en móviles
-    a.click(); 
-    document.body.removeChild(a);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "Pizarra_Proyecto.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 function cargarLocal() { 
-    const i = document.createElement('input'); 
-    i.type = 'file'; 
-    i.accept = '.json'; 
-    i.style.display = 'none';
-    document.body.appendChild(i); // Vital para que el navegador no lo borre antes de abrir
-
+    const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.style.display = 'none'; document.body.appendChild(i); 
     i.onchange = e => { 
-        const file = e.target.files[0];
-        if(!file) return;
-        const r = new FileReader(); 
-        r.onload = ev => { 
-            try {
-                aplicarEstado(ev.target.result); 
-                guardarEstado(); 
-            } catch(err) {
-                alert("Error: El archivo de la pizarra es inválido o está dañado.");
-            }
-            document.body.removeChild(i);
-        }; 
+        const file = e.target.files[0]; if(!file) return; const r = new FileReader(); 
+        r.onload = ev => { try { aplicarEstado(ev.target.result); guardarEstado(); } catch(err) { alert("Error al cargar."); } document.body.removeChild(i); }; 
         r.readAsText(file); 
-    }; 
-    i.click(); 
+    }; i.click(); 
 }
 
 function exportarJPG() {
@@ -376,12 +367,14 @@ socket.on('dibujar', o => { if(o.type==='image'){ const i=new Image(); i.src=o.s
 socket.on('cargar_historial', h => { elementos = h; historialCargado = true; elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); pedirRender(); if(historialUndo.length===0) guardarEstado(); });
 socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarEstado(); pedirRender(); });
 socket.on('dibujar_laser', d => { if(!lasersActivos[d.id]) lasersActivos[d.id] = { color: d.color, points: [] }; lasersActivos[d.id].points.push(d.pt); });
+
 socket.on('mover_cursor', d => {
     cursoresData[d.id] = { x: d.x, y: d.y, nombre: d.nombre };
     if (siguiendoA === d.id) { camera.x = (canvas.width / 2) - (d.x * camera.z); camera.y = (canvas.height / 2) - (d.y * camera.z); }
     if(!cur[d.id]){ const v=document.createElement('div'); v.className='cursor-fantasma'; v.setAttribute('data-nombre', d.nombre || "Anónimo"); document.getElementById('cursores').appendChild(v); cur[d.id]=v; actualizarListaUI(); }
     cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; cur[d.id].style.top=(d.y * camera.z + camera.y)+'px'; pedirRender();
 });
+
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; } delete cursoresData[id]; if(siguiendoA === id) dejarDeSeguir(); actualizarListaUI(); });
 
 function subirImagen() {
@@ -405,5 +398,6 @@ canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove'
 canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); }, {passive:false});
 canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
+
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; pedirRender(); });
 guardarEstado(); requestAnimationFrame(ejecutarRender);
