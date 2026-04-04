@@ -62,7 +62,6 @@ function redo() {
     aplicarEstado(p);
 }
 
-// Lógica de subir imágenes comprimidas (Evita el límite de Socket.io)
 function subirImagen() {
     const inputFile = document.createElement('input');
     inputFile.type = 'file';
@@ -308,7 +307,6 @@ function cargarLocal() {
 }
 
 function render() {
-    // FIX ANTI-DARK MODE: Forzar el repintado del fondo con color blanco constante (#FEFEFE)
     ctx.fillStyle = "#fefefe";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -382,5 +380,13 @@ window.addEventListener('touchmove', e => {
 }, {passive:false});
 window.addEventListener('touchend', end);
 
-window.onresize = () => { canvas.width=window.innerWidth; canvas.height=window.innerHeight; render(); };
+// FIX ANTI-REBOTE: Solo re-renderizar si el tamaño cambió de verdad (ignora ocultamiento de barra de URL)
+window.onresize = () => { 
+    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+        canvas.width = window.innerWidth; 
+        canvas.height = window.innerHeight; 
+        render(); 
+    }
+};
+
 guardarEstado(); render();
