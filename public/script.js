@@ -11,73 +11,58 @@ canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 
-// --- SISTEMA DE MEMORIA (UNDO/REDO) ---
+// --- MOTOR DE HISTORIAL (UNDO/REDO) ---
 let historialUndo = []; 
 let historialRedo = [];
 let historialCargado = false, cambioRealizado = false;
 
 function guardarEstado() {
-    // Convertimos el estado actual a un string JSON (sin los objetos Image de JS, solo las rutas)
     const snapshot = JSON.stringify(elementos.map(el => { 
         const { imgObj, ...datos } = el; 
         return datos; 
     }));
-    
-    // Si el último estado guardado es igual al actual, no guardamos duplicados
     if (historialUndo.length > 0 && historialUndo[historialUndo.length - 1] === snapshot) return;
-
     historialUndo.push(snapshot);
-    if (historialUndo.length > 40) historialUndo.shift(); // Límite de memoria (40 pasos)
-    historialRedo = []; // Al hacer un cambio nuevo, limpiamos el camino de "Rehacer"
+    if (historialUndo.length > 50) historialUndo.shift();
+    historialRedo = []; 
 }
 
 function aplicarEstado(snapshotJSON) {
     const data = JSON.parse(snapshotJSON);
     elementos = data;
-    
-    // Rehidratar las imágenes
-    elementos.forEach(el => { 
-        if(el.type === 'image'){ 
-            el.imgObj = new Image(); 
-            el.imgObj.src = el.src; 
-        }
-    });
-
+    elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; }});
     pedirRender();
-    // Sincronizar con el resto de usuarios inmediatamente
     if(historialCargado) socket.emit('sync_todo', elementos);
 }
 
 function undo() {
-    if (historialUndo.length <= 1) return; // Necesitamos al menos 2 estados para volver atrás
-    const estadoActual = historialUndo.pop();
-    historialRedo.push(estadoActual);
-    const estadoAnterior = historialUndo[historialUndo.length - 1];
-    aplicarEstado(estadoAnterior);
+    if (historialUndo.length <= 1) return;
+    const actual = historialUndo.pop();
+    historialRedo.push(actual);
+    aplicarEstado(historialUndo[historialUndo.length - 1]);
 }
 
 function redo() {
     if (historialRedo.length === 0) return;
-    const proximoEstado = historialRedo.pop();
-    historialUndo.push(proximoEstado);
-    aplicarEstado(proximoEstado);
+    const siguiente = historialRedo.pop();
+    historialUndo.push(siguiente);
+    aplicarEstado(siguiente);
 }
 
-// ---------------------------------------
-
+// --- VARIABLES DE INTERACCIÓN ---
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 let seleccionados = [], boxSeleccion = null, handleSeleccionado = null, lastMousePos = { x: 0, y: 0 };
 let lasersActivos = {}, miLaserId = null;
-
-let cursoresData = {}; 
-let siguiendoA = null, ultimoClickTime = 0;
+let cursoresData = {}, siguiendoA = null, ultimoClickTime = 0;
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
+// RENDER LOOP
 let renderRequerido = true;
 function pedirRender() { if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); } }
 setInterval(pedirRender, 1000/60);
 
+// EDITOR DE TEXTO
 function mostrarEditorTexto(valorInicial, callback) {
     const overlay = document.createElement('div'); overlay.id = 'text-editor-overlay';
     const modal = document.createElement('div'); modal.className = 'editor-modal';
@@ -116,24 +101,10 @@ const enviarCursor = (() => {
 })();
 
 // CAPAS
-function traerAlFrente() { 
-    if (seleccionados.length === 0) return; 
-    elementos = elementos.filter(el => !seleccionados.includes(el)); 
-    elementos.push(...seleccionados); 
-    guardarEstado(); // <-- FIX: Graba estado al mover capas
-    if(historialCargado) socket.emit('sync_todo', elementos); 
-    pedirRender(); 
-}
-function enviarAlFondo() { 
-    if (seleccionados.length === 0) return; 
-    elementos = elementos.filter(el => !seleccionados.includes(el)); 
-    elementos.unshift(...seleccionados); 
-    guardarEstado(); // <-- FIX: Graba estado al mover capas
-    if(historialCargado) socket.emit('sync_todo', elementos); 
-    pedirRender(); 
-}
+function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
+function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 
-// BOTONES TOOLBAR
+// BOTONES
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.onclick = () => {
         const id = btn.id;
@@ -185,17 +156,10 @@ const start = e => {
             const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
             return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
         });
-
         if (dif < 300 && hit && (hit.type === 'text' || hit.type === 'sticky')) {
-            mostrarEditorTexto(hit.text, (nuevo) => {
-                hit.text = nuevo; 
-                guardarEstado(); // <-- FIX: Graba estado al editar texto
-                if(historialCargado) socket.emit('sync_todo', elementos);
-                pedirRender();
-            });
+            mostrarEditorTexto(hit.text, (nuevo) => { hit.text = nuevo; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); });
             return;
         }
-
         if(hit) {
             if (!seleccionados.includes(hit)) seleccionados = [hit];
             lastMousePos = { x: p.x, y: p.y };
@@ -215,18 +179,14 @@ const start = e => {
     if(modo === 'sticky') {
         mostrarEditorTexto("", (t) => {
             const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: controls.color.value, w: 200, h: 200, grosor: 1 }; 
-            elementos.push(obj); socket.emit('dibujar', obj); 
-            guardarEstado(); // <-- FIX: Graba estado al crear nota
-            pedirRender();
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender();
         }); return;
     }
 
     if(modo === 'text') {
         mostrarEditorTexto("", (t) => {
             const obj = { type:'text', x: p.x, y: p.y, text: t, color: controls.color.value, w: 120, h: 30, grosor: 2 }; 
-            elementos.push(obj); socket.emit('dibujar', obj); 
-            guardarEstado(); // <-- FIX: Graba estado al crear texto
-            pedirRender();
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender();
         }); return;
     }
 
@@ -283,16 +243,8 @@ const end = e => {
         });
         boxSeleccion = null;
     }
-    if(dibujando && elementoActual) { 
-        elementos.push(elementoActual); 
-        socket.emit('dibujar', elementoActual); 
-        guardarEstado(); // <-- GRABAMOS ESTADO AL TERMINAR DE DIBUJAR
-    } 
-    else if (cambioRealizado) { 
-        if(historialCargado) socket.emit('sync_todo', elementos); 
-        guardarEstado(); // <-- GRABAMOS ESTADO AL TERMINAR DE MOVER/RESIZE
-        cambioRealizado = false; 
-    }
+    if(dibujando && elementoActual) { elementos.push(elementoActual); socket.emit('dibujar', elementoActual); guardarEstado(); } 
+    else if (cambioRealizado) { if(historialCargado) socket.emit('sync_todo', elementos); guardarEstado(); cambioRealizado = false; }
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null; pedirRender();
 };
 
@@ -302,17 +254,10 @@ function borrarEn(p) {
         const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
         return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
     });
-    if(i !== -1) { 
-        elementos.splice(i, 1); 
-        guardarEstado(); // <-- GRABAMOS ESTADO AL BORRAR
-        if(historialCargado) socket.emit('sync_todo', elementos);
-        pedirRender(); 
-    }
+    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 }
 
-function reiniciarLienzo() { if(confirm("¿Borrar todo?")) { socket.emit('limpiar_todo'); } }
-
-// --- EXPORTACIÓN Y ASISTENTES ---
+function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
 function exportarJPG() {
     seleccionados = []; pedirRender();
     setTimeout(() => {
@@ -326,7 +271,7 @@ function exportarJPG() {
         const temp = document.createElement('canvas'); temp.width = maxX - minX; temp.height = maxY - minY;
         const t = temp.getContext('2d'); t.fillStyle = "#fefefe"; t.fillRect(0,0,temp.width,temp.height);
         t.save(); t.translate(-minX, -minY); elementos.forEach(el => helperDibujarElemento(t, el, 1)); t.restore();
-        const a = document.createElement('a'); a.download = 'Pizarra_Final.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click();
+        const a = document.createElement('a'); a.download = 'Captura.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click();
     }, 50);
 }
 
@@ -367,7 +312,6 @@ function ejecutarRender() {
     for(let y = sY; y < (canvas.height-camera.y)/camera.z + stp; y += stp) { ctx.moveTo((-camera.x/camera.z), y); ctx.lineTo((canvas.width-camera.x)/camera.z, y); }
     ctx.stroke();
     [...elementos, elementoActual].forEach(el => { if(!el) return; helperDibujarElemento(ctx, el, camera.z); if(modo==='select' && seleccionados.includes(el)){ ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z; if(el.type==='pen'){ const xs=el.points.map(pt=>pt.x), ys=el.points.map(pt=>pt.y); ctx.strokeRect(Math.min(...xs)-5, Math.min(...ys)-5, Math.max(...xs)-Math.min(...xs)+10, Math.max(...ys)-Math.min(...ys)+10); } else ctx.strokeRect(el.x, el.y, el.w, el.h); ctx.setLineDash([]); } });
-    if (boxSeleccion) { ctx.fillStyle = "rgba(33, 150, 243, 0.1)"; ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 1/camera.z; ctx.fillRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); ctx.strokeRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); }
     const now = Date.now();
     for (let id in lasersActivos) {
         const lr = lasersActivos[id]; lr.points = lr.points.filter(pt => now - pt.t < 1500);
@@ -376,47 +320,25 @@ function ejecutarRender() {
     ctx.restore();
 }
 
-// TECLADO
 window.addEventListener('keydown', e => {
-    if((e.key === 'Delete' || e.key === 'Backspace') && seleccionados.length > 0 && modo === 'select') { 
-        elementos = elementos.filter(el => !seleccionados.includes(el)); 
-        seleccionados = []; 
-        guardarEstado(); // <-- GRABAMOS AL BORRAR
-        if(historialCargado) socket.emit('sync_todo', elementos); 
-        pedirRender(); 
-    }
+    if((e.key === 'Delete' || e.key === 'Backspace') && seleccionados.length > 0 && modo === 'select') { elementos = elementos.filter(el => !seleccionados.includes(el)); seleccionados = []; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
     if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
-    if(e.ctrlKey && (e.key === 'y' || (e.ctrlKey && e.shiftKey && e.key === 'Z'))) { e.preventDefault(); redo(); }
+    if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); redo(); }
     if(e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); traerAlFrente(); }
     if(e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); enviarAlFondo(); }
 });
 
-// SOCKETS
 socket.on('dibujar', o => { if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; } else { elementos.push(o); pedirRender(); } });
-socket.on('cargar_historial', h => { 
-    elementos = h; historialCargado = true; 
-    elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); 
-    pedirRender(); 
-    if(historialUndo.length === 0) guardarEstado(); // Grabamos el primer estado al entrar
-});
-socket.on('limpiar_todo', () => { elementos = []; guardarEstado(); pedirRender(); });
+socket.on('cargar_historial', h => { elementos = h; historialCargado = true; elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); pedirRender(); if(historialUndo.length===0) guardarEstado(); });
+socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; pedirRender(); });
 socket.on('dibujar_laser', d => { if(!lasersActivos[d.id]) lasersActivos[d.id] = { color: d.color, points: [] }; lasersActivos[d.id].points.push(d.pt); });
 socket.on('mover_cursor', d => {
     cursoresData[d.id] = { x: d.x, y: d.y, nombre: d.nombre };
     if (siguiendoA === d.id) { camera.x = (canvas.width / 2) - (d.x * camera.z); camera.y = (canvas.height / 2) - (d.y * camera.z); }
-    if(!cur[d.id]){ 
-        const v=document.createElement('div'); v.className='cursor-fantasma'; 
-        v.setAttribute('data-nombre', d.nombre || "Anónimo"); document.getElementById('cursores').appendChild(v); cur[d.id]=v; 
-        actualizarListaUI();
-    }
+    if(!cur[d.id]){ const v=document.createElement('div'); v.className='cursor-fantasma'; v.setAttribute('data-nombre', d.nombre || "Anónimo"); document.getElementById('cursores').appendChild(v); cur[d.id]=v; actualizarListaUI(); }
     cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; cur[d.id].style.top=(d.y * camera.z + camera.y)+'px'; pedirRender();
 });
-
-const cur = {};
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; } delete cursoresData[id]; if(siguiendoA === id) dejarDeSeguir(); actualizarListaUI(); });
-
-function guardarLocal() { const blob = new Blob([JSON.stringify(elementos.map(el=>{const {imgObj,...r}=el; return r;}))], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "Pizarra_Proyecto.json"; a.click(); }
-function cargarLocal() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = e => { const r = new FileReader(); r.onload = ev => { aplicarEstado(JSON.parse(ev.target.result)); guardarEstado(); }; r.readAsText(e.target.files[0]); }; i.click(); }
 
 function subirImagen() {
     const iF = document.createElement('input'); iF.type = 'file'; iF.accept = 'image/*';
@@ -429,14 +351,7 @@ function subirImagen() {
                 if (w > maxSize || h > maxSize) { if (w > h) { h = (maxSize / w) * h; w = maxSize; } else { w = (maxSize / h) * w; h = maxSize; } }
                 const tC = document.createElement('canvas'); tC.width = w; tC.height = h; const tX = tC.getContext('2d'); tX.fillStyle = "#ffffff"; tX.fillRect(0,0,w,h); tX.drawImage(img, 0, 0, w, h);
                 const cSrc = tC.toDataURL('image/jpeg', 0.8); const fI = new Image(); fI.src = cSrc;
-                fI.onload = () => { 
-                    const vW = w > 300 ? 300 : w; const vH = (h/w)*vW; 
-                    const cX = (-camera.x + canvas.width/2)/camera.z - vW/2; const cY = (-camera.y + canvas.height/2)/camera.z - vH/2; 
-                    const o = { id: Math.random(), type:'image', x: cX, y: cY, w: vW, h: vH, src: cSrc, grosor: 1 }; 
-                    o.imgObj = fI; elementos.push(o); socket.emit('dibujar', o); 
-                    guardarEstado(); // <-- GRABAMOS AL SUBIR IMAGEN
-                    pedirRender(); 
-                };
+                fI.onload = () => { const vW = w > 300 ? 300 : w; const vH = (h/w)*vW; const cX = (-camera.x + canvas.width/2)/camera.z - vW/2; const cY = (-camera.y + canvas.height/2)/camera.z - vH/2; const o = { id: Math.random(), type:'image', x: cX, y: cY, w: vW, h: vH, src: cSrc, grosor: 1 }; o.imgObj = fI; elementos.push(o); socket.emit('dibujar', o); guardarEstado(); pedirRender(); };
             };
         }; r.readAsDataURL(file);
     }; iF.click();
@@ -446,6 +361,6 @@ canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove'
 canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); }, {passive:false});
 canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
-window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; pedirRender(); });
 
+window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; pedirRender(); });
 guardarEstado(); requestAnimationFrame(ejecutarRender);
