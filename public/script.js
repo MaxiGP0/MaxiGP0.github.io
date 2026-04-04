@@ -16,22 +16,20 @@ let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 let historialUndo = [], historialRedo = [], historialCargado = false, cambioRealizado = false;
 
-// Variables de interacción y Portapapeles (NUEVO)
 let portapapeles = [];
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 let seleccionados = [], boxSeleccion = null, handleSeleccionado = null, lastMousePos = { x: 0, y: 0 };
 let lasersActivos = {}, miLaserId = null;
 let cursoresData = {}, siguiendoA = null, ultimoClickTime = 0;
 let miPosicionMundo = { x: 0, y: 0 };
-let isPenEraser = false; // Detecta el borrador físico del stylus
+let isPenEraser = false; 
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// Limpiador de Usuarios Fantasma (NUEVO)
 setInterval(() => {
     const now = Date.now();
     for (let id in cursoresData) {
-        if (now - cursoresData[id].lastUpdate > 10000) { // Si no se mueve en 10s, lo borramos
+        if (now - cursoresData[id].lastUpdate > 10000) { 
             if (cur[id]) { cur[id].remove(); delete cur[id]; }
             delete cursoresData[id];
             if (siguiendoA === id) dejarDeSeguir();
@@ -101,6 +99,10 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home'].includes(id)) {
             if(id==='btn-export') exportarJPG(); if(id==='btn-clear') reiniciarLienzo();
             if(id==='btn-undo') undo(); if(id==='btn-redo') redo(); if(id==='btn-front') traerAlFrente(); if(id==='btn-back') enviarAlFondo();
+            
+            // FIX: Le damos la instrucción a JavaScript de volver a la pantalla de inicio
+            if(id==='btn-home') window.location.href = 'index.html'; 
+            
             return;
         }
         if(id === 'btn-image') { subirImagen(); return; }
@@ -129,20 +131,18 @@ canvas.addEventListener('wheel', e => {
 const start = e => {
     const ahora = Date.now(); const dif = ahora - ultimoClickTime; ultimoClickTime = ahora;
     
-    // Pinch to zoom y Rechazo de palma en celular
     if(e.touches && e.touches.length > 1) {
         dejarDeSeguir(); isPanning = false; dibujando = false; seleccionados = [];
         const t1 = e.touches[0], t2 = e.touches[1]; initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         initialCamZ = camera.z; initialCamX = camera.x; initialCamY = camera.y; pinchCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 }; return;
     }
 
-    // Detección de lápiz digital y borrador físico
     isPenEraser = (e.pointerType === 'pen' && (e.buttons === 32 || e.buttons === 2 || e.button === 5));
     const m = isPenEraser ? 'erase' : modo;
 
     const p = getPos(e);
     miPosicionMundo = { x: p.x, y: p.y };
-    enviarCursor(p.x, p.y); // FIX: Ahora los teléfonos actualizan su cursor al tocar
+    enviarCursor(p.x, p.y); 
 
     if(m === 'pan' || e.button === 1) { dejarDeSeguir(); isPanning = true; startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; return; }
     if(m === 'erase') { borrarEn(p); return; }
@@ -191,7 +191,7 @@ const start = e => {
 
     dibujando = true;
     elementoActual = { id: Math.random(), type: m, x: p.x, y: p.y, w: 0, h: 0, color: controls.color.value, grosor: parseInt(controls.grosor.value), points: [{x:p.x, y:p.y}] };
-    pedirRender(); // FIX: Dibuja el punto inicial instantáneamente
+    pedirRender(); 
 };
 
 const move = e => {
@@ -203,7 +203,6 @@ const move = e => {
         camera.z = newZ; pedirRender(); return;
     }
     
-    // FIX: Rechazo de palma si hay varios toques intentando dibujar
     if (e.type === 'touchmove' && e.touches && e.touches.length > 1) { dibujando = false; return; }
 
     const m = isPenEraser ? 'erase' : modo;
@@ -242,7 +241,7 @@ const move = e => {
 };
 
 const end = e => {
-    isPenEraser = false; // Reiniciamos el estado del borrador físico
+    isPenEraser = false; 
     if (boxSeleccion) {
         seleccionados = elementos.filter(el => {
             let eX, eW, eY, eH;
@@ -288,7 +287,6 @@ function exportarJPG() {
 function helperDibujarElemento(c, el, z) {
     c.strokeStyle = el.color; c.fillStyle = el.color; c.lineWidth = el.grosor; c.lineCap = "round"; c.lineJoin = "round";
     if(el.type==='pen'){ 
-        // FIX: Si es solo un clic, dibuja un punto redondo perfecto
         if (el.points.length === 1) {
             c.beginPath(); c.arc(el.points[0].x, el.points[0].y, el.grosor / 2, 0, Math.PI * 2); c.fill();
         } else {
@@ -338,7 +336,6 @@ function ejecutarRender() {
     ctx.restore();
 }
 
-// NUEVO: Sistema de Copy / Paste
 window.addEventListener('keydown', e => {
     if((e.key === 'Delete' || e.key === 'Backspace') && seleccionados.length > 0 && modo === 'select') { 
         elementos = elementos.filter(el => !seleccionados.includes(el)); seleccionados = []; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); 
@@ -348,24 +345,18 @@ window.addEventListener('keydown', e => {
     if(e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); traerAlFrente(); }
     if(e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); enviarAlFondo(); }
     
-    // COPY (Ctrl+C)
     if(e.ctrlKey && e.key === 'c' && seleccionados.length > 0) {
         portapapeles = JSON.parse(JSON.stringify(seleccionados));
     }
-    // PASTE (Ctrl+V)
     if(e.ctrlKey && e.key === 'v' && portapapeles.length > 0) {
         seleccionados = [];
         portapapeles.forEach(item => {
             let clon = JSON.parse(JSON.stringify(item));
             clon.id = Math.random();
-            clon.x += 20; clon.y += 20; // Lo desplazamos un poquito para que se note
+            clon.x += 20; clon.y += 20; 
             if (clon.type === 'pen') { clon.points.forEach(pt => { pt.x += 20; pt.y += 20; }); }
-            
-            if (clon.type === 'image' && clon.src) {
-                clon.imgObj = new Image(); clon.imgObj.onload = pedirRender; clon.imgObj.src = clon.src;
-            }
-            elementos.push(clon);
-            seleccionados.push(clon);
+            if (clon.type === 'image' && clon.src) { clon.imgObj = new Image(); clon.imgObj.onload = pedirRender; clon.imgObj.src = clon.src; }
+            elementos.push(clon); seleccionados.push(clon);
         });
         guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender();
     }
@@ -378,7 +369,6 @@ socket.on('dibujar_laser', d => { if(!lasersActivos[d.id]) lasersActivos[d.id] =
 
 const cur = {};
 socket.on('mover_cursor', d => {
-    // FIX FANTASMAS: Actualizamos la hora del último movimiento del usuario
     cursoresData[d.id] = { x: d.x, y: d.y, nombre: d.nombre, lastUpdate: Date.now() };
     if (siguiendoA === d.id) { camera.x = (canvas.width / 2) - (d.x * camera.z); camera.y = (canvas.height / 2) - (d.y * camera.z); }
     if(!cur[d.id]){ const v=document.createElement('div'); v.className='cursor-fantasma'; v.setAttribute('data-nombre', d.nombre || "Anónimo"); document.getElementById('cursores').appendChild(v); cur[d.id]=v; actualizarListaUI(); }
@@ -404,7 +394,6 @@ function subirImagen() {
     }; iF.click();
 }
 
-// FIX: Soporte híbrido para Lápices Digitales, Mouse y Dedos simultáneos
 canvas.addEventListener('pointerdown', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') start(e); });
 canvas.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') move(e); });
 window.addEventListener('pointerup', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') end(e); });
