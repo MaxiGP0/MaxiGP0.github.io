@@ -1,4 +1,3 @@
-// 1. PEDIR CONTRASEÑA ANTES DE ENTRAR
 const pass = prompt("🔐 Ingresa la contraseña secreta para entrar al cuaderno:");
 const socket = io({ auth: { password: pass } });
 
@@ -8,8 +7,7 @@ socket.on('connect_error', (err) => {
 });
 
 const canvas = document.getElementById('pizarra');
-
-// ⚡ EL TRUCO DE LATENCIA PARA LÁPICES DIGITALES: { desynchronized: true }
+// Truco para latencia ultrabaja con lápices digitales
 const ctx = canvas.getContext('2d', { desynchronized: true });
 
 canvas.width = window.innerWidth;
@@ -24,7 +22,7 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- SISTEMA THROTTLING ---
+// --- THROTTLING (Optimización de red) ---
 function throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -37,10 +35,9 @@ function throttle(func, limit) {
         }
     }
 }
-
 const enviarCursor = throttle((x, y) => { socket.emit('mover_cursor', { x, y }); }, 50); 
 
-// --- MEMORIA ---
+// --- MEMORIA (Undo/Redo) ---
 function guardarEstado() {
     const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; }));
     historialUndo.push(snap);
@@ -77,8 +74,8 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         else if(id === 'btn-load') cargarLocal();
         else if(id === 'btn-clear') reiniciarLienzo();
         else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; render(); }
-        else if(id === 'btn-undo') undo(); // <-- BOTÓN NUEVO
-        else if(id === 'btn-redo') redo(); // <-- BOTÓN NUEVO
+        else if(id === 'btn-undo') undo(); 
+        else if(id === 'btn-redo') redo(); 
         else {
             document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -105,7 +102,7 @@ function obtenerHandles(el) {
     ];
 }
 
-// --- EVENTOS DE INTERACCIÓN ---
+// --- EVENTOS ---
 const start = e => {
     if(e.touches && e.touches.length === 2) {
         isPanning = false; dibujando = false; seleccionado = null;
@@ -254,7 +251,6 @@ function cargarLocal() {
     i.click();
 }
 
-// 🐛 FIX: FUNCIÓN DE IMAGEN CORREGIDA
 function subirImagen() {
     const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
     i.onchange = e => {
@@ -264,8 +260,6 @@ function subirImagen() {
             img.onload = () => {
                 const w = img.width > 300 ? 300 : img.width;
                 const h = (img.height/img.width)*w;
-                
-                // Calculamos el centro exacto de la pantalla según la cámara
                 const centerX = (-camera.x + canvas.width / 2) / camera.z - w / 2;
                 const centerY = (-camera.y + canvas.height / 2) / camera.z - h / 2;
 
@@ -278,8 +272,12 @@ function subirImagen() {
     i.click();
 }
 
+// --- RENDER ---
 function render() {
-    ctx.clearRect(0,0,canvas.width,canvas.height);
+    // Forzar fondo blanco real
+    ctx.fillStyle = "white";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
     ctx.save(); ctx.translate(camera.x, camera.y); ctx.scale(camera.z, camera.z);
     
     const left = -camera.x / camera.z, top = -camera.y / camera.z;
