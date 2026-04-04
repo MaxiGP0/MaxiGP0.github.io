@@ -30,6 +30,7 @@ button.active { background: #4caf50; color: white; }
 
 #pizarra { display: block; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #fefefe; touch-action: none; }
 
+/* LISTA DE USUARIOS */
 #user-list-container {
     position: fixed; top: 70px; right: 20px; background: white;
     padding: 15px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.1);
@@ -45,6 +46,26 @@ button.active { background: #4caf50; color: white; }
 .user-item:hover { background: #e9ecef; border-color: #ddd; }
 .user-item.active { background: #e3f2fd; border-color: #2196f3; font-weight: bold; color: #1976d2; }
 
+/* EDITOR DE TEXTO FLOTANTE (NUEVO) */
+#text-editor-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.3); z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+}
+.editor-modal {
+    background: white; padding: 20px; border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.3); width: 90%; max-width: 400px;
+}
+.editor-modal textarea {
+    width: 100%; height: 150px; border: 1px solid #ddd; border-radius: 10px;
+    padding: 10px; font-size: 16px; font-family: inherit; resize: none; margin-bottom: 10px;
+}
+.editor-modal button {
+    width: 100%; background: #4caf50; color: white; border-radius: 10px;
+    font-weight: bold; font-size: 16px; height: 50px;
+}
+
+/* CURSORES */
 .cursor-fantasma {
     position: absolute; width: 10px; height: 10px; background: #ff0055;
     border: 2px solid white; border-radius: 50%; pointer-events: none;
