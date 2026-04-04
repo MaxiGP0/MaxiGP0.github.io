@@ -19,8 +19,9 @@ mongoose.connect(uri)
     .catch(err => console.error("🔴 Error conectando a MongoDB:", err));
 
 // --- 2. EL "MOLDE" DE LAS SALAS ---
+// Ahora cada sala es un documento en la base de datos
 const ProyectoSchema = new mongoose.Schema({
-    _id: String,             // El ID será el nombre de la sala (ej: "universidad")
+    _id: String,             // El ID será el nombre de la sala (ej: "x8a9pq")
     elementos: { type: Array, default: [] }, // El JSON de los dibujos
     fecha: { type: Date, default: Date.now }
 });
@@ -29,7 +30,7 @@ const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 // --- 3. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
 const PASSWORD_SALA = "12345";
 
-// Filtro de seguridad al entrar
+// Filtro de seguridad: Exigimos contraseña y nombre de sala
 io.use((socket, next) => {
     const { password, salaId } = socket.handshake.auth;
     if (password === PASSWORD_SALA && salaId) {
@@ -65,7 +66,7 @@ io.on('connection', async (socket) => {
     socket.on('sync_todo', async (nuevoHistorial) => {
         socket.to(sala).emit('cargar_historial', nuevoHistorial);
         
-        // Guardamos en el disco duro de la nube
+        // Guardamos en el disco duro de la nube silenciosamente
         await Proyecto.findByIdAndUpdate(sala, { 
             elementos: nuevoHistorial, 
             fecha: Date.now() 
