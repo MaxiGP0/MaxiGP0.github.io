@@ -7,7 +7,7 @@ socket.on('connect_error', (err) => {
 });
 
 const canvas = document.getElementById('pizarra');
-// FIX GRÁFICO: Quitamos desynchronized y avisamos que es de uso intensivo
+// FIX GRÁFICO: willReadFrequently evita el parpadeo de pantalla en celulares
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
 canvas.width = window.innerWidth;
@@ -20,9 +20,10 @@ let handleSeleccionado = null, historialUndo = [], historialRedo = [];
 let historialCargado = false, cambioRealizado = false; 
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 
-// --- FIX GRÁFICO: BUCLE DE RENDERIZADO (Game Loop) ---
-// Evita ahogar la GPU del celular dibujando solo cuando la pantalla lo pide (a 60Hz)
-let renderRequerido = true; // Empieza en true para el primer dibujo
+const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
+
+// --- MOTOR DE RENDERIZADO (Game Loop para fluidez a 60 FPS) ---
+let renderRequerido = true; 
 
 function pedirRender() {
     if (!renderRequerido) {
@@ -30,10 +31,6 @@ function pedirRender() {
         requestAnimationFrame(ejecutarRender);
     }
 }
-
-// --------------------------------------------------------
-
-const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
 function throttle(func, limit) {
     let inThrottle;
@@ -157,11 +154,34 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
+// FIX LÁPIZ DIGITAL: Coordenadas precisas para que la tinta salga de la punta
 function getPos(e) {
-    const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
+    let clientX, clientY;
+    
+    // Identificar si el evento viene de un dedo (Touch) o Ratón/Lápiz
+    if (e.touches && e.touches.length > 0) {
+        clientX = e.touches[0].clientX; 
+        clientY = e.touches[0].clientY;
+    } else if (e.changedTouches && e.changedTouches.length > 0) {
+        clientX = e.changedTouches[0].clientX; 
+        clientY = e.changedTouches[0].clientY;
+    } else {
+        clientX = e.clientX; 
+        clientY = e.clientY;
+    }
+
     const rect = canvas.getBoundingClientRect();
-    const sx = t.clientX - rect.left, sy = t.clientY - rect.top;
-    return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
+    
+    // Restamos el margen del canvas para obtener la posición real
+    const sx = clientX - rect.left;
+    const sy = clientY - rect.top;
+    
+    return { 
+        x: (sx - camera.x) / camera.z, 
+        y: (sy - camera.y) / camera.z, 
+        rx: sx, 
+        ry: sy 
+    };
 }
 
 function obtenerHandles(el) {
@@ -300,8 +320,6 @@ function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_
 
 function exportarJPG() {
     seleccionado = null; pedirRender();
-    
-    // Esperamos un momento para asegurar que el render se limpió (quitó selección) antes de la foto
     setTimeout(() => {
         const temp = document.createElement('canvas'); temp.width = canvas.width; temp.height = canvas.height;
         const t = temp.getContext('2d');
@@ -325,9 +343,8 @@ function cargarLocal() {
     i.click();
 }
 
-// --- FUNCIÓN EJECUTAR RENDER ---
 function ejecutarRender() {
-    renderRequerido = false; // Ya estamos renderizando, bajamos la bandera
+    renderRequerido = false; 
 
     ctx.fillStyle = "#fefefe";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -348,12 +365,10 @@ function ejecutarRender() {
         if(!el) return;
         ctx.strokeStyle = el.color; ctx.fillStyle = el.color; ctx.lineWidth = el.grosor; ctx.lineCap = "round";
         
-        // Optimización: No dibujar cosas que están totalmente fuera de la pantalla (Culling)
+        // Optimización: No dibujar si está muy fuera de pantalla
         if (el.type !== 'pen' && el.type !== 'line') {
-            const minX = Math.min(el.x, el.x + el.w);
-            const maxX = Math.max(el.x, el.x + el.w);
-            const minY = Math.min(el.y, el.y + el.h);
-            const maxY = Math.max(el.y, el.y + el.h);
+            const minX = Math.min(el.x, el.x + el.w); const maxX = Math.max(el.x, el.x + el.w);
+            const minY = Math.min(el.y, el.y + el.h); const maxY = Math.max(el.y, el.y + el.h);
             if (maxX < left || minX > right || maxY < top || minY > bottom) return; 
         }
 
@@ -398,20 +413,23 @@ socket.on('mover_cursor', d => {
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
+// FIX MÓVIL: Control absoluto de los eventos táctiles directamente sobre el canvas
 canvas.addEventListener('mousedown', start); 
-window.addEventListener('mousemove', e => {
-    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado) return;
-    move(e);
-}); 
+canvas.addEventListener('mousemove', move); 
 window.addEventListener('mouseup', end);
 
-canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
-window.addEventListener('touchmove', e => { 
-    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado && !handleSeleccionado) return; 
-    if (e.cancelable) e.preventDefault(); move(e); 
+canvas.addEventListener('touchstart', e => { 
+    e.preventDefault(); 
+    start(e); 
 }, {passive:false});
-canvas.addEventListener('touchend', end);
-canvas.addEventListener('touchcancel', end);
+
+canvas.addEventListener('touchmove', e => { 
+    e.preventDefault(); 
+    move(e); 
+}, {passive:false});
+
+canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
+canvas.addEventListener('touchcancel', e => { e.preventDefault(); end(e); }, {passive:false});
 
 let lastWidth = window.innerWidth;
 window.addEventListener('resize', () => {
@@ -425,4 +443,4 @@ window.addEventListener('resize', () => {
 });
 
 guardarEstado();
-requestAnimationFrame(ejecutarRender); // Disparo inicial
+requestAnimationFrame(ejecutarRender);
