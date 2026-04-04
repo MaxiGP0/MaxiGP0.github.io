@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="color-scheme" content="light only">
-    <title>Cuaderno Pro Multiplayer</title>
+    <title>Pizarra | Cuaderno Pro</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -20,12 +20,15 @@
 
     <nav id="toolbar-container">
         <div id="toolbar">
-            <button id="btn-select" class="active" title="Mover / Doble clic para editar">👆</button>
-            <button id="btn-front" title="Traer al Frente">⏫</button>
-            <button id="btn-back" title="Enviar al Fondo">⏬</button>
-            <button id="btn-pan" title="Mover Lienzo">🖐️</button>
-            <button id="btn-zoom_reset" title="Vista Original">👁️</button>
+            <button id="btn-home" title="Volver a Mis Pizarras" onclick="window.location.href='index.html'">🏠</button>
             <div class="sep"></div>
+            
+            <button id="btn-select" class="active" title="Mover / Seleccionar">👆</button>
+            <button id="btn-undo" title="Deshacer (Ctrl+Z)">↩️</button>
+            <button id="btn-redo" title="Rehacer (Ctrl+Y)">↪️</button>
+            <button id="btn-pan" title="Mover Lienzo">🖐️</button>
+            <div class="sep"></div>
+            
             <button id="btn-pen" title="Lápiz">✏️</button>
             <button id="btn-laser" title="Láser">🔦</button> 
             <button id="btn-sticky" title="Nota Adhesiva">📌</button>
@@ -36,18 +39,19 @@
             <button id="btn-image" title="Imagen">🖼️</button>
             <button id="btn-erase" title="Goma">🧽</button>
             <div class="sep"></div>
-            <button id="btn-undo" title="Deshacer (Ctrl+Z)">↩️</button>
-            <button id="btn-redo" title="Rehacer (Ctrl+Y)">↪️</button>
+
+            <button id="btn-front" title="Traer al Frente">⏫</button>
+            <button id="btn-back" title="Enviar al Fondo">⏬</button>
             <div class="sep"></div>
+            
             <input type="color" id="color-picker" value="#000000" title="Color"> 
             <div class="slider-box">
                 <input type="range" id="width-slider" min="1" max="25" value="3">
             </div>
             <div class="sep"></div>
-            <button id="btn-export" title="Exportar Todo">📸</button>
-            <button id="btn-save" title="Guardar">💾</button>
-            <button id="btn-load" title="Cargar">📂</button>
-            <button id="btn-clear" style="color:red" title="Borrar Todo">🗑️</button>
+            
+            <button id="btn-export" title="Exportar JPG">📸</button>
+            <button id="btn-clear" style="color:red" title="Borrar Toda la Pizarra">🗑️</button>
         </div>
     </nav>
 
