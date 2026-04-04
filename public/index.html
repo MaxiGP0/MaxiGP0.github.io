@@ -38,11 +38,9 @@
     </div>
 
     <script>
-        // 1. Verificar si tiene Pase VIP, si no, echarlo al Login
         const token = localStorage.getItem('token_cuaderno');
         if (!token) window.location.href = 'login.html';
         
-        // Poner su nombre en pantalla
         document.getElementById('nombre-usuario').innerText = localStorage.getItem('nombre_usuario');
 
         function cerrarSesion() {
@@ -58,7 +56,6 @@
             const nuevoNombre = prompt("Nuevo nombre:", nombreActual);
             if (nuevoNombre && nuevoNombre.trim() !== "") {
                 try {
-                    // Enviamos el Token en la cabecera (Header) "Authorization"
                     await fetch(`/api/proyectos/${idSala}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -86,7 +83,7 @@
             const grid = document.getElementById('project-grid');
             try {
                 const respuesta = await fetch('/api/proyectos', { headers: { 'Authorization': `Bearer ${token}` } });
-                if (respuesta.status === 401) return cerrarSesion(); // Si el token caducó, cerramos sesión
+                if (respuesta.status === 401) return cerrarSesion(); 
                 const proyectos = await respuesta.json();
                 grid.innerHTML = '';
                 if (proyectos.length === 0) return grid.innerHTML = `<div class="empty-state">No tienes proyectos. ¡Crea uno!</div>`;
