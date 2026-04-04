@@ -3,178 +3,140 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-
-// NUEVO: Motores de Seguridad
-const bcrypt = require('bcryptjs');     // Para encriptar contraseñas
-const jwt = require('jsonwebtoken');    // Para crear el pase VIP de sesión
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: { origin: "*", methods: ["GET", "POST"] }
-});
+const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 
 app.use(express.json()); 
 app.use(express.static('public'));
 
-// --- 1. CONEXIÓN A LA BASE DE DATOS ---
 const uri = process.env.MONGO_URI;
 mongoose.connect(uri)
     .then(() => console.log("🟢 ¡Conectado a MongoDB! El cerebro está en línea."))
     .catch(err => console.error("🔴 Error conectando a MongoDB:", err));
 
-// --- 2. LOS MOLDES (SCHEMAS) DE LA BASE DE DATOS ---
-
-// NUEVO MOLDE: Usuarios
+// --- MOLDES ---
 const UsuarioSchema = new mongoose.Schema({
     nombre: { type: String, required: true },
-    email: { type: String, required: true, unique: true }, // El email no se puede repetir
-    password: { type: String, required: true },            // Aquí guardaremos la clave encriptada
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true },
     fechaRegistro: { type: Date, default: Date.now }
 });
 const Usuario = mongoose.model('Usuario', UsuarioSchema);
 
-// MOLDE ACTUALIZADO: Proyectos (Ahora con dueño)
 const ProyectoSchema = new mongoose.Schema({
     _id: String,             
     nombre: { type: String, default: 'Pizarra Sin Nombre' }, 
     elementos: { type: Array, default: [] }, 
-    propietarioId: { type: String }, // <-- NUEVO: Guardaremos el ID del dueño aquí
+    propietarioId: { type: String }, // Aquí se guarda quién es el dueño
     fecha: { type: Date, default: Date.now }
 });
 const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 
+const LLAVE_SECRETA_JWT = process.env.JWT_SECRET || 'mi_llave_secreta_temporal_123';
 
-// --- 3. NUEVAS PUERTAS DE SEGURIDAD (LOGIN / REGISTRO) ---
-const LLAVE_SECRETA_JWT = process.env.JWT_SECRET || 'mi_llave_secreta_temporal_123'; // La llave para fabricar los pases VIP
-
-// Puerta para Registrarse
+// --- RUTAS DE AUTENTICACIÓN ---
 app.post('/api/auth/registro', async (req, res) => {
     try {
         const { nombre, email, password } = req.body;
-
-        // 1. Revisamos si el email ya existe
-        const usuarioExistente = await Usuario.findOne({ email: email });
-        if (usuarioExistente) {
-            return res.status(400).json({ error: 'Ese correo ya está registrado.' });
-        }
-
-        // 2. Encriptamos la contraseña (le damos 10 vueltas de cifrado)
+        if (await Usuario.findOne({ email })) return res.status(400).json({ error: 'El correo ya existe.' });
         const salt = await bcrypt.genSalt(10);
         const passwordEncriptada = await bcrypt.hash(password, salt);
-
-        // 3. Creamos al usuario en la base de datos
-        const nuevoUsuario = await Usuario.create({
-            nombre: nombre,
-            email: email,
-            password: passwordEncriptada
-        });
-
-        res.json({ success: true, mensaje: 'Usuario creado correctamente.' });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({ error: 'Error al registrar usuario.' });
-    }
+        await Usuario.create({ nombre, email, password: passwordEncriptada });
+        res.json({ success: true });
+    } catch (error) { res.status(500).json({ error: 'Error al registrar.' }); }
 });
 
-// Puerta para Iniciar Sesión
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-
-        // 1. Buscamos al usuario por su email
-        const usuario = await Usuario.findOne({ email: email });
-        if (!usuario) {
-            return res.status(400).json({ error: 'Correo o contraseña incorrectos.' });
-        }
-
-        // 2. Comparamos la contraseña que escribió con la encriptada
-        const contraseñaValida = await bcrypt.compare(password, usuario.password);
-        if (!contraseñaValida) {
-            return res.status(400).json({ error: 'Correo o contraseña incorrectos.' });
-        }
-
-        // 3. ¡Todo correcto! Fabricamos un pase VIP (Token)
-        // Este pase dice "El portador es X usuario" y tiene la firma del servidor
-        const paseVIP = jwt.sign(
-            { id: usuario._id, nombre: usuario.nombre }, 
-            LLAVE_SECRETA_JWT, 
-            { expiresIn: '7d' } // El pase caduca en 7 días
-        );
-
-        res.json({ 
-            success: true, 
-            token: paseVIP, 
-            usuario: { id: usuario._id, nombre: usuario.nombre } 
-        });
-
-    } catch (error) {
-        res.status(500).json({ error: 'Error al iniciar sesión.' });
-    }
+        const usuario = await Usuario.findOne({ email });
+        if (!usuario) return res.status(400).json({ error: 'Datos incorrectos.' });
+        const valida = await bcrypt.compare(password, usuario.password);
+        if (!valida) return res.status(400).json({ error: 'Datos incorrectos.' });
+        const token = jwt.sign({ id: usuario._id, nombre: usuario.nombre }, LLAVE_SECRETA_JWT, { expiresIn: '7d' });
+        res.json({ success: true, token, usuario: { id: usuario._id, nombre: usuario.nombre } });
+    } catch (error) { res.status(500).json({ error: 'Error al iniciar sesión.' }); }
 });
 
-
-// --- 4. LAS PUERTAS API (PARA EL DASHBOARD) ---
-// (Por ahora las dejamos igual para no romper tu web, mañana las protegeremos)
-
-app.get('/api/proyectos', async (req, res) => {
+// --- EL GUARDIA DE SEGURIDAD PARA EL DASHBOARD ---
+const verificarToken = (req, res, next) => {
+    const token = req.headers['authorization'];
+    if (!token) return res.status(401).json({ error: 'Acceso denegado' });
     try {
-        const proyectos = await Proyecto.find({}, '_id nombre fecha').sort({ fecha: -1 });
+        // Lee el Pase VIP y extrae quién es el usuario
+        const verificado = jwt.verify(token.split(" ")[1], LLAVE_SECRETA_JWT);
+        req.usuario = verificado;
+        next();
+    } catch (error) { res.status(400).json({ error: 'Token inválido' }); }
+};
+
+// --- PUERTAS API PROTEGIDAS ---
+app.get('/api/proyectos', verificarToken, async (req, res) => {
+    try {
+        // Magia: Solo trae los proyectos donde el dueño sea el usuario actual
+        const proyectos = await Proyecto.find({ propietarioId: req.usuario.id }, '_id nombre fecha').sort({ fecha: -1 });
         res.json(proyectos);
     } catch (error) { res.status(500).json({ error: 'Error al cargar' }); }
 });
 
-app.put('/api/proyectos/:id', async (req, res) => {
+app.put('/api/proyectos/:id', verificarToken, async (req, res) => {
     try {
+        // Verificamos que sea el dueño antes de renombrar
+        const p = await Proyecto.findById(req.params.id);
+        if (p.propietarioId !== req.usuario.id) return res.status(403).json({ error: 'No eres el dueño' });
         await Proyecto.findByIdAndUpdate(req.params.id, { nombre: req.body.nombre });
         res.json({ success: true });
     } catch (error) { res.status(500).json({ error: 'Error al renombrar' }); }
 });
 
-app.delete('/api/proyectos/:id', async (req, res) => {
+app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
     try {
+        // Verificamos que sea el dueño antes de borrar
+        const p = await Proyecto.findById(req.params.id);
+        if (p.propietarioId !== req.usuario.id) return res.status(403).json({ error: 'No eres el dueño' });
         await Proyecto.findByIdAndDelete(req.params.id);
         res.json({ success: true });
     } catch (error) { res.status(500).json({ error: 'Error al borrar' }); }
 });
 
-
-// --- 5. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
-// (Por ahora se queda igual)
-
-const PASSWORD_SALA = "12345";
-
+// --- LÓGICA DE MULTIJUGADOR (SOCKET.IO) PROTEGIDA ---
 io.use((socket, next) => {
-    const { password, salaId } = socket.handshake.auth;
-    if (password === PASSWORD_SALA && salaId) {
+    const { token, salaId } = socket.handshake.auth;
+    if (!token || !salaId) return next(new Error("Sin Pase VIP"));
+    try {
+        // Revisamos el Pase VIP antes de dejarlo entrar a la sala
+        const decoded = jwt.verify(token, LLAVE_SECRETA_JWT);
+        socket.usuario = decoded; // Guardamos quién es
         socket.salaId = salaId;
         return next();
-    }
-    return next(new Error("Contraseña incorrecta o sin sala"));
+    } catch(err) { return next(new Error("Pase VIP inválido")); }
 });
 
 io.on('connection', async (socket) => {
     const sala = socket.salaId;
     socket.join(sala);
-    console.log(`👤 Usuario entró a la sala: ${sala}`);
+    console.log(`👤 ${socket.usuario.nombre} entró a la sala: ${sala}`);
 
     let proyecto = await Proyecto.findById(sala);
-    if (!proyecto) { proyecto = await Proyecto.create({ _id: sala, elementos: [] }); }
+    if (!proyecto) { 
+        // Si la sala no existe, el que la crea se convierte en el DUEÑO oficial
+        proyecto = await Proyecto.create({ _id: sala, elementos: [], propietarioId: socket.usuario.id }); 
+    }
 
     socket.emit('cargar_historial', proyecto.elementos);
-
     socket.on('dibujar', (datos) => socket.to(sala).emit('dibujar', datos));
-
     socket.on('sync_todo', async (nuevoHistorial) => {
         socket.to(sala).emit('cargar_historial', nuevoHistorial);
         await Proyecto.findByIdAndUpdate(sala, { elementos: nuevoHistorial, fecha: Date.now() });
     });
-
     socket.on('limpiar_todo', async () => {
         io.to(sala).emit('limpiar_todo');
         await Proyecto.findByIdAndUpdate(sala, { elementos: [] });
     });
-
     socket.on('dibujar_laser', (datos) => socket.to(sala).emit('dibujar_laser', datos));
     socket.on('mover_cursor', (datos) => socket.to(sala).emit('mover_cursor', { id: socket.id, x: datos.x, y: datos.y, nombre: datos.nombre }));
     socket.on('disconnect', () => socket.to(sala).emit('borrar_cursor', socket.id));
