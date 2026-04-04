@@ -7,7 +7,6 @@ socket.on('connect_error', (err) => {
 });
 
 const canvas = document.getElementById('pizarra');
-// Truco para latencia ultrabaja con lápices digitales
 const ctx = canvas.getContext('2d', { desynchronized: true });
 
 canvas.width = window.innerWidth;
@@ -22,7 +21,6 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- THROTTLING (Optimización de red) ---
 function throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -37,7 +35,6 @@ function throttle(func, limit) {
 }
 const enviarCursor = throttle((x, y) => { socket.emit('mover_cursor', { x, y }); }, 50); 
 
-// --- MEMORIA (Undo/Redo) ---
 function guardarEstado() {
     const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; }));
     historialUndo.push(snap);
@@ -65,7 +62,62 @@ function redo() {
     aplicarEstado(p);
 }
 
-// --- BOTONES ---
+// Lógica de subir imágenes comprimidas (Evita el límite de Socket.io)
+function subirImagen() {
+    const inputFile = document.createElement('input');
+    inputFile.type = 'file';
+    inputFile.accept = 'image/*';
+
+    inputFile.onchange = e => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = ev => {
+            const img = new Image();
+            img.src = ev.target.result;
+            img.onload = () => {
+                const maxSize = 800; 
+                let w = img.width;
+                let h = img.height;
+
+                if (w > maxSize || h > maxSize) {
+                    if (w > h) { h = (maxSize / w) * h; w = maxSize; } 
+                    else { w = (maxSize / h) * w; h = maxSize; }
+                }
+
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = w; tempCanvas.height = h;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                tempCtx.fillStyle = "#ffffff";
+                tempCtx.fillRect(0,0,w,h);
+                tempCtx.drawImage(img, 0, 0, w, h);
+
+                const compressedSrc = tempCanvas.toDataURL('image/jpeg', 0.8);
+
+                const finalImg = new Image();
+                finalImg.src = compressedSrc;
+                finalImg.onload = () => {
+                    const visualW = w > 300 ? 300 : w;
+                    const visualH = (h / w) * visualW;
+                    const centerX = (-camera.x + canvas.width / 2) / camera.z - visualW / 2;
+                    const centerY = (-camera.y + canvas.height / 2) / camera.z - visualH / 2;
+
+                    const obj = { id: Math.random(), type:'image', x: centerX, y: centerY, w: visualW, h: visualH, src: compressedSrc, grosor: 1 };
+                    obj.imgObj = finalImg; 
+                    elementos.push(obj); 
+                    socket.emit('dibujar', obj); 
+                    guardarEstado(); 
+                    render();
+                };
+            };
+        };
+        reader.readAsDataURL(file);
+    };
+    inputFile.click();
+}
+
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.addEventListener('click', () => {
         const id = btn.id;
@@ -76,6 +128,13 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; render(); }
         else if(id === 'btn-undo') undo(); 
         else if(id === 'btn-redo') redo(); 
+        else if(id === 'btn-image') {
+            subirImagen(); 
+            document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            modo = 'select'; 
+            seleccionado = null; render();
+        }
         else {
             document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -85,12 +144,10 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
-// --- SISTEMA DE COORDENADAS ---
 function getPos(e) {
     const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
     const rect = canvas.getBoundingClientRect();
-    const sx = t.clientX - rect.left;
-    const sy = t.clientY - rect.top;
+    const sx = t.clientX - rect.left, sy = t.clientY - rect.top;
     return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
 }
 
@@ -102,7 +159,6 @@ function obtenerHandles(el) {
     ];
 }
 
-// --- EVENTOS ---
 const start = e => {
     if(e.touches && e.touches.length === 2) {
         isPanning = false; dibujando = false; seleccionado = null;
@@ -232,8 +288,8 @@ function exportarJPG() {
     seleccionado = null; render();
     const temp = document.createElement('canvas'); temp.width = canvas.width; temp.height = canvas.height;
     const t = temp.getContext('2d');
-    t.fillStyle = "white"; t.fillRect(0,0,temp.width,temp.height); t.drawImage(canvas, 0, 0);
-    const a = document.createElement('a'); a.download = 'dibujo.jpg'; a.href = temp.toDataURL('image/jpeg'); a.click();
+    t.fillStyle = "#fefefe"; t.fillRect(0,0,temp.width,temp.height); t.drawImage(canvas, 0, 0);
+    const a = document.createElement('a'); a.download = 'dibujo.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click();
 }
 
 function guardarLocal() {
@@ -251,31 +307,9 @@ function cargarLocal() {
     i.click();
 }
 
-function subirImagen() {
-    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
-    i.onchange = e => {
-        const r = new FileReader();
-        r.onload = ev => {
-            const img = new Image(); img.src = ev.target.result;
-            img.onload = () => {
-                const w = img.width > 300 ? 300 : img.width;
-                const h = (img.height/img.width)*w;
-                const centerX = (-camera.x + canvas.width / 2) / camera.z - w / 2;
-                const centerY = (-camera.y + canvas.height / 2) / camera.z - h / 2;
-
-                const obj = { id: Math.random(), type:'image', x: centerX, y: centerY, w: w, h: h, src: img.src, grosor: 1 };
-                obj.imgObj = img; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); render();
-            };
-        };
-        r.readAsDataURL(e.target.files[0]);
-    };
-    i.click();
-}
-
-// --- RENDER ---
 function render() {
-    // Forzar fondo blanco real
-    ctx.fillStyle = "white";
+    // FIX ANTI-DARK MODE: Forzar el repintado del fondo con color blanco constante (#FEFEFE)
+    ctx.fillStyle = "#fefefe";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     ctx.save(); ctx.translate(camera.x, camera.y); ctx.scale(camera.z, camera.z);
@@ -283,7 +317,7 @@ function render() {
     const left = -camera.x / camera.z, top = -camera.y / camera.z;
     const right = (canvas.width - camera.x) / camera.z, bottom = (canvas.height - camera.y) / camera.z;
 
-    ctx.strokeStyle = "#eee"; ctx.lineWidth = 1 / camera.z; ctx.beginPath();
+    ctx.strokeStyle = "#eeeeee"; ctx.lineWidth = 1 / camera.z; ctx.beginPath();
     const step = 40, startX = left - (left % step) - step, startY = top - (top % step) - step;
 
     for(let x = startX; x < right + step; x += step){ ctx.moveTo(x, top); ctx.lineTo(x, bottom); }
