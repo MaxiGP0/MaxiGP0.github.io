@@ -7,7 +7,6 @@ socket.on('connect_error', (err) => {
 });
 
 const canvas = document.getElementById('pizarra');
-// FIX GRÁFICO: willReadFrequently evita el parpadeo de pantalla en celulares
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
 canvas.width = window.innerWidth;
@@ -22,7 +21,6 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- MOTOR DE RENDERIZADO (Game Loop para fluidez a 60 FPS) ---
 let renderRequerido = true; 
 
 function pedirRender() {
@@ -154,11 +152,10 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
-// FIX LÁPIZ DIGITAL: Coordenadas precisas para que la tinta salga de la punta
+// FIX DEFINITIVO: Cálculo de Escala (Scale) para anular el estiramiento en celulares
 function getPos(e) {
     let clientX, clientY;
     
-    // Identificar si el evento viene de un dedo (Touch) o Ratón/Lápiz
     if (e.touches && e.touches.length > 0) {
         clientX = e.touches[0].clientX; 
         clientY = e.touches[0].clientY;
@@ -172,9 +169,13 @@ function getPos(e) {
 
     const rect = canvas.getBoundingClientRect();
     
-    // Restamos el margen del canvas para obtener la posición real
-    const sx = clientX - rect.left;
-    const sy = clientY - rect.top;
+    // Calculamos si el lienzo visual fue estirado por el navegador
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    
+    // Multiplicamos por la escala para obtener la coordenada interna perfecta
+    const sx = (clientX - rect.left) * scaleX;
+    const sy = (clientY - rect.top) * scaleY;
     
     return { 
         x: (sx - camera.x) / camera.z, 
@@ -365,7 +366,6 @@ function ejecutarRender() {
         if(!el) return;
         ctx.strokeStyle = el.color; ctx.fillStyle = el.color; ctx.lineWidth = el.grosor; ctx.lineCap = "round";
         
-        // Optimización: No dibujar si está muy fuera de pantalla
         if (el.type !== 'pen' && el.type !== 'line') {
             const minX = Math.min(el.x, el.x + el.w); const maxX = Math.max(el.x, el.x + el.w);
             const minY = Math.min(el.y, el.y + el.h); const maxY = Math.max(el.y, el.y + el.h);
@@ -413,7 +413,6 @@ socket.on('mover_cursor', d => {
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
-// FIX MÓVIL: Control absoluto de los eventos táctiles directamente sobre el canvas
 canvas.addEventListener('mousedown', start); 
 canvas.addEventListener('mousemove', move); 
 window.addEventListener('mouseup', end);
