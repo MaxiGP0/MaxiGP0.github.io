@@ -7,7 +7,8 @@ socket.on('connect_error', (err) => {
 });
 
 const canvas = document.getElementById('pizarra');
-const ctx = canvas.getContext('2d', { desynchronized: true });
+// FIX GRÁFICO: Quitamos desynchronized y avisamos que es de uso intensivo
+const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
@@ -18,6 +19,19 @@ let handleSeleccionado = null, historialUndo = [], historialRedo = [];
 
 let historialCargado = false, cambioRealizado = false; 
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
+
+// --- FIX GRÁFICO: BUCLE DE RENDERIZADO (Game Loop) ---
+// Evita ahogar la GPU del celular dibujando solo cuando la pantalla lo pide (a 60Hz)
+let renderRequerido = true; // Empieza en true para el primer dibujo
+
+function pedirRender() {
+    if (!renderRequerido) {
+        renderRequerido = true;
+        requestAnimationFrame(ejecutarRender);
+    }
+}
+
+// --------------------------------------------------------
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
@@ -44,8 +58,8 @@ function guardarEstado() {
 
 function aplicarEstado(s) {
     elementos = s;
-    elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; el.imgObj.onload = render; }});
-    render();
+    elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; el.imgObj.onload = pedirRender; }});
+    pedirRender();
     if(historialCargado) socket.emit('sync_todo', elementos);
 }
 
@@ -108,7 +122,7 @@ function subirImagen() {
                     elementos.push(obj); 
                     socket.emit('dibujar', obj); 
                     guardarEstado(); 
-                    render();
+                    pedirRender();
                 };
             };
         };
@@ -124,7 +138,7 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         else if(id === 'btn-save') guardarLocal();
         else if(id === 'btn-load') cargarLocal();
         else if(id === 'btn-clear') reiniciarLienzo();
-        else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; render(); }
+        else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; pedirRender(); }
         else if(id === 'btn-undo') undo(); 
         else if(id === 'btn-redo') redo(); 
         else if(id === 'btn-image') {
@@ -132,13 +146,13 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             modo = 'select'; 
-            seleccionado = null; render();
+            seleccionado = null; pedirRender();
         }
         else {
             document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             modo = id.replace('btn-', '');
-            seleccionado = null; render();
+            seleccionado = null; pedirRender();
         }
     });
 });
@@ -174,7 +188,7 @@ const start = e => {
 
     if(modo === 'select') {
         if(seleccionado) {
-            const radioAcierto = 30 / camera.z; // Margen más grande para los dedos
+            const radioAcierto = 30 / camera.z; 
             handleSeleccionado = obtenerHandles(seleccionado).find(h => Math.hypot(p.x - h.x, p.y - h.y) < radioAcierto);
             if(handleSeleccionado) return;
         }
@@ -186,14 +200,14 @@ const start = e => {
         });
 
         if(seleccionado) { seleccionado.ox = p.x - seleccionado.x; seleccionado.oy = p.y - seleccionado.y; }
-        render(); return;
+        pedirRender(); return;
     }
 
     if(modo === 'text') {
         const t = prompt("Escribe tu texto:");
         if(t) { 
             const obj = { type:'text', x: p.x, y: p.y, text: t, color: controls.color.value, w: 120, h: 30, grosor: 2 };
-            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); render(); 
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); 
         }
         return;
     }
@@ -216,18 +230,18 @@ const move = e => {
         camera.x = currentCenter.x - (pinchCenter.x - initialCamX) * (newZ / initialCamZ);
         camera.y = currentCenter.y - (pinchCenter.y - initialCamY) * (newZ / initialCamZ);
         camera.z = newZ;
-        render(); return;
+        pedirRender(); return;
     }
 
     const p = getPos(e);
     if(!dibujando && !isPanning) enviarCursor(p.x, p.y); 
 
-    if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; render(); return; }
+    if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
 
     if(dibujando && elementoActual) {
         if(modo === 'pen') elementoActual.points.push({x: p.x, y: p.y});
         else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; }
-        render();
+        pedirRender();
     }
 
     if(modo === 'select' && seleccionado) {
@@ -241,7 +255,7 @@ const move = e => {
             seleccionado.y = p.y - seleccionado.oy;
             cambioRealizado = true;
         }
-        render();
+        pedirRender();
     }
 };
 
@@ -256,6 +270,7 @@ const end = e => {
         guardarEstado(); cambioRealizado = false;
     }
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null;
+    pedirRender();
 };
 
 canvas.addEventListener('wheel', e => {
@@ -269,7 +284,7 @@ canvas.addEventListener('wheel', e => {
 
     camera.x = mouseX - (mouseX - camera.x) * (newZ / camera.z);
     camera.y = mouseY - (mouseY - camera.y) * (newZ / camera.z);
-    camera.z = newZ; render();
+    camera.z = newZ; pedirRender();
 }, { passive: false });
 
 function borrarEn(p) {
@@ -278,17 +293,21 @@ function borrarEn(p) {
         const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
         return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
     });
-    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); render(); if(historialCargado) socket.emit('sync_todo', elementos); }
+    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos); }
 }
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
 
 function exportarJPG() {
-    seleccionado = null; render();
-    const temp = document.createElement('canvas'); temp.width = canvas.width; temp.height = canvas.height;
-    const t = temp.getContext('2d');
-    t.fillStyle = "#fefefe"; t.fillRect(0,0,temp.width,temp.height); t.drawImage(canvas, 0, 0);
-    const a = document.createElement('a'); a.download = 'dibujo.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click();
+    seleccionado = null; pedirRender();
+    
+    // Esperamos un momento para asegurar que el render se limpió (quitó selección) antes de la foto
+    setTimeout(() => {
+        const temp = document.createElement('canvas'); temp.width = canvas.width; temp.height = canvas.height;
+        const t = temp.getContext('2d');
+        t.fillStyle = "#fefefe"; t.fillRect(0,0,temp.width,temp.height); t.drawImage(canvas, 0, 0);
+        const a = document.createElement('a'); a.download = 'dibujo.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click();
+    }, 50);
 }
 
 function guardarLocal() {
@@ -306,7 +325,10 @@ function cargarLocal() {
     i.click();
 }
 
-function render() {
+// --- FUNCIÓN EJECUTAR RENDER ---
+function ejecutarRender() {
+    renderRequerido = false; // Ya estamos renderizando, bajamos la bandera
+
     ctx.fillStyle = "#fefefe";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
@@ -325,6 +347,16 @@ function render() {
     [...elementos, elementoActual].forEach(el => {
         if(!el) return;
         ctx.strokeStyle = el.color; ctx.fillStyle = el.color; ctx.lineWidth = el.grosor; ctx.lineCap = "round";
+        
+        // Optimización: No dibujar cosas que están totalmente fuera de la pantalla (Culling)
+        if (el.type !== 'pen' && el.type !== 'line') {
+            const minX = Math.min(el.x, el.x + el.w);
+            const maxX = Math.max(el.x, el.x + el.w);
+            const minY = Math.min(el.y, el.y + el.h);
+            const maxY = Math.max(el.y, el.y + el.h);
+            if (maxX < left || minX > right || maxY < top || minY > bottom) return; 
+        }
+
         if(el.type==='pen'){ ctx.beginPath(); el.points.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke(); }
         else if(el.type==='rect') ctx.strokeRect(el.x, el.y, el.w, el.h);
         else if(el.type==='line'){ ctx.beginPath(); ctx.moveTo(el.x, el.y); ctx.lineTo(el.x+el.w, el.y+el.h); ctx.stroke(); }
@@ -349,15 +381,15 @@ window.addEventListener('keydown', e => {
 });
 
 socket.on('dibujar', o => {
-    if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); render();}; }
-    else { elementos.push(o); render(); }
+    if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; }
+    else { elementos.push(o); pedirRender(); }
 });
 socket.on('cargar_historial', h => {
     elementos = h; historialCargado = true;
-    elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src; el.imgObj.onload=render;}});
-    render(); if(historialUndo.length===0) guardarEstado();
+    elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src; el.imgObj.onload=pedirRender;}});
+    pedirRender(); if(historialUndo.length===0) guardarEstado();
 });
-socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarEstado(); render(); });
+socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarEstado(); pedirRender(); });
 
 const cur = {};
 socket.on('mover_cursor', d => {
@@ -366,38 +398,31 @@ socket.on('mover_cursor', d => {
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
-// FIX MÓVIL: Los eventos táctiles ahora están anclados EXCLUSIVAMENTE al canvas.
-canvas.addEventListener('mousedown', start);
-canvas.addEventListener('mousemove', move);
-
-canvas.addEventListener('touchstart', e => { 
-    e.preventDefault(); // Detiene el zoom/scroll nativo instantáneamente
-    start(e); 
-}, {passive: false});
-
-canvas.addEventListener('touchmove', e => { 
-    e.preventDefault(); // Evita el efecto rebote mientras arrastras
-    move(e); 
-}, {passive: false});
-
-canvas.addEventListener('touchend', e => {
-    e.preventDefault();
-    end(e);
-}, {passive: false});
-
+canvas.addEventListener('mousedown', start); 
+window.addEventListener('mousemove', e => {
+    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado) return;
+    move(e);
+}); 
 window.addEventListener('mouseup', end);
 
-// FIX ANTI-REBOTE: Ignora los cambios de tamaño falsos de la barra de direcciones en el celular
+canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
+window.addEventListener('touchmove', e => { 
+    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado && !handleSeleccionado) return; 
+    if (e.cancelable) e.preventDefault(); move(e); 
+}, {passive:false});
+canvas.addEventListener('touchend', end);
+canvas.addEventListener('touchcancel', end);
+
 let lastWidth = window.innerWidth;
 window.addEventListener('resize', () => {
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    // Si estamos en celular y el ancho no cambió (solo se ocultó la URL), lo ignoramos
     if (isMobile && window.innerWidth === lastWidth) return; 
 
     lastWidth = window.innerWidth;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    render();
+    pedirRender();
 });
 
-guardarEstado(); render();
+guardarEstado();
+requestAnimationFrame(ejecutarRender); // Disparo inicial
