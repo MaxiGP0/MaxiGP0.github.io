@@ -13,6 +13,7 @@ const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } 
 app.use(express.json()); 
 app.use(express.static('public'));
 
+// --- CONEXIÓN A LA BASE DE DATOS ---
 const uri = process.env.MONGO_URI;
 mongoose.connect(uri)
     .then(() => console.log("🟢 ¡Conectado a MongoDB! El cerebro está en línea."))
@@ -31,7 +32,7 @@ const ProyectoSchema = new mongoose.Schema({
     _id: String,             
     nombre: { type: String, default: 'Pizarra Sin Nombre' }, 
     elementos: { type: Array, default: [] }, 
-    propietarioId: { type: String }, // Aquí se guarda quién es el dueño
+    propietarioId: { type: String }, 
     fecha: { type: Date, default: Date.now }
 });
 const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
@@ -67,7 +68,6 @@ const verificarToken = (req, res, next) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(401).json({ error: 'Acceso denegado' });
     try {
-        // Lee el Pase VIP y extrae quién es el usuario
         const verificado = jwt.verify(token.split(" ")[1], LLAVE_SECRETA_JWT);
         req.usuario = verificado;
         next();
@@ -77,7 +77,6 @@ const verificarToken = (req, res, next) => {
 // --- PUERTAS API PROTEGIDAS ---
 app.get('/api/proyectos', verificarToken, async (req, res) => {
     try {
-        // Magia: Solo trae los proyectos donde el dueño sea el usuario actual
         const proyectos = await Proyecto.find({ propietarioId: req.usuario.id }, '_id nombre fecha').sort({ fecha: -1 });
         res.json(proyectos);
     } catch (error) { res.status(500).json({ error: 'Error al cargar' }); }
@@ -85,7 +84,6 @@ app.get('/api/proyectos', verificarToken, async (req, res) => {
 
 app.put('/api/proyectos/:id', verificarToken, async (req, res) => {
     try {
-        // Verificamos que sea el dueño antes de renombrar
         const p = await Proyecto.findById(req.params.id);
         if (p.propietarioId !== req.usuario.id) return res.status(403).json({ error: 'No eres el dueño' });
         await Proyecto.findByIdAndUpdate(req.params.id, { nombre: req.body.nombre });
@@ -95,7 +93,6 @@ app.put('/api/proyectos/:id', verificarToken, async (req, res) => {
 
 app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
     try {
-        // Verificamos que sea el dueño antes de borrar
         const p = await Proyecto.findById(req.params.id);
         if (p.propietarioId !== req.usuario.id) return res.status(403).json({ error: 'No eres el dueño' });
         await Proyecto.findByIdAndDelete(req.params.id);
@@ -108,9 +105,8 @@ io.use((socket, next) => {
     const { token, salaId } = socket.handshake.auth;
     if (!token || !salaId) return next(new Error("Sin Pase VIP"));
     try {
-        // Revisamos el Pase VIP antes de dejarlo entrar a la sala
         const decoded = jwt.verify(token, LLAVE_SECRETA_JWT);
-        socket.usuario = decoded; // Guardamos quién es
+        socket.usuario = decoded; 
         socket.salaId = salaId;
         return next();
     } catch(err) { return next(new Error("Pase VIP inválido")); }
@@ -123,7 +119,6 @@ io.on('connection', async (socket) => {
 
     let proyecto = await Proyecto.findById(sala);
     if (!proyecto) { 
-        // Si la sala no existe, el que la crea se convierte en el DUEÑO oficial
         proyecto = await Proyecto.create({ _id: sala, elementos: [], propietarioId: socket.usuario.id }); 
     }
 
