@@ -30,23 +30,21 @@ button.active { background: #4caf50; color: white; }
 
 #pizarra { display: block; position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; background-color: #fefefe; touch-action: none; }
 
-/* LISTA DE USUARIOS */
 #user-list-container {
     position: fixed; top: 70px; right: 20px; background: white;
     padding: 15px; border-radius: 15px; box-shadow: 0 5px 20px rgba(0,0,0,0.1);
     z-index: 900; max-width: 150px; border: 1px solid #eee;
 }
-#user-list-container h3 { font-size: 12px; margin-bottom: 10px; color: #888; text-transform: uppercase; }
+#user-list-container h3 { font-size: 11px; margin-bottom: 8px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
 .user-item {
-    padding: 8px 12px; margin-bottom: 5px; background: #f8f9fa;
+    padding: 8px 12px; margin-bottom: 4px; background: #f8f9fa;
     border-radius: 8px; font-size: 13px; cursor: pointer;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     transition: all 0.2s; border: 1px solid transparent;
 }
-.user-item:hover { background: #e9ecef; border-color: #4caf50; }
-.user-item.active { background: #e3f2fd; border-color: #2196f3; font-weight: bold; }
+.user-item:hover { background: #e9ecef; border-color: #ddd; }
+.user-item.active { background: #e3f2fd; border-color: #2196f3; font-weight: bold; color: #1976d2; }
 
-/* CURSORES */
 .cursor-fantasma {
     position: absolute; width: 10px; height: 10px; background: #ff0055;
     border: 2px solid white; border-radius: 50%; pointer-events: none;
