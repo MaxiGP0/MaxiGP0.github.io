@@ -7,12 +7,19 @@
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 40px 20px; color: #333; }
         .container { max-width: 1000px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; flex-wrap: wrap; gap: 20px;}
         h1 { margin: 0; font-size: 28px; color: #111; }
         
+        .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
         .btn-nuevo { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); }
-        .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; margin-right: 10px; }
+        .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; }
         
+        /* NUEVO: Caja para unirse por código */
+        .join-box { display: flex; background: white; border-radius: 30px; overflow: hidden; border: 1px solid #ccc; }
+        .join-box input { border: none; padding: 10px 15px; outline: none; font-size: 14px; width: 140px; }
+        .join-box button { background: #2196F3; color: white; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .join-box button:hover { background: #1976D2; }
+
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 25px; }
         .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: all 0.2s; border: 1px solid #eaeaea; position: relative; cursor: pointer; }
         .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
@@ -29,9 +36,14 @@
     <div class="container">
         <div class="header">
             <h1>Hola, <span id="nombre-usuario"></span> 👋</h1>
-            <div>
-                <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+            <div class="header-actions">
+                <div class="join-box">
+                    <input type="text" id="input-codigo" placeholder="Código de sala">
+                    <button onclick="unirsePorCodigo()">Unirse</button>
+                </div>
+
                 <button class="btn-nuevo" onclick="crearNuevoProyecto()">➕ Nuevo Proyecto</button>
+                <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
             </div>
         </div>
         <div class="grid" id="project-grid"><p style="text-align: center; color: #888;">Cargando...</p></div>
@@ -40,7 +52,6 @@
     <script>
         const token = localStorage.getItem('token_cuaderno');
         if (!token) window.location.href = 'login.html';
-        
         document.getElementById('nombre-usuario').innerText = localStorage.getItem('nombre_usuario');
 
         function cerrarSesion() {
@@ -50,6 +61,14 @@
         }
 
         function crearNuevoProyecto() { window.location.href = `pizarra.html?sala=${Math.random().toString(36).substr(2, 6)}`; }
+
+        // NUEVO: Función del botón Unirse
+        function unirsePorCodigo() {
+            const codigo = document.getElementById('input-codigo').value.trim();
+            if(codigo) {
+                window.location.href = `pizarra.html?sala=${codigo}`;
+            }
+        }
 
         async function renombrarProyecto(event, idSala, nombreActual) {
             event.preventDefault(); event.stopPropagation(); 
@@ -70,10 +89,7 @@
             event.preventDefault(); event.stopPropagation(); 
             if (confirm(`⚠️ ¿Borrar "${nombreActual}" para siempre?`)) {
                 try {
-                    await fetch(`/api/proyectos/${idSala}`, { 
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    await fetch(`/api/proyectos/${idSala}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
                     cargarProyectos();
                 } catch (error) { alert("Error al borrar."); }
             }
@@ -86,7 +102,7 @@
                 if (respuesta.status === 401) return cerrarSesion(); 
                 const proyectos = await respuesta.json();
                 grid.innerHTML = '';
-                if (proyectos.length === 0) return grid.innerHTML = `<div class="empty-state">No tienes proyectos. ¡Crea uno!</div>`;
+                if (proyectos.length === 0) return grid.innerHTML = `<div class="empty-state">No tienes proyectos. ¡Crea uno o únete a una sala!</div>`;
 
                 proyectos.forEach(proj => {
                     const fechaObj = new Date(proj.fecha);
