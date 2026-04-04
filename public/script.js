@@ -174,13 +174,13 @@ const start = e => {
 
     if(modo === 'select') {
         if(seleccionado) {
-            const radioAcierto = 20 / camera.z; 
+            const radioAcierto = 30 / camera.z; // Margen más grande para los dedos
             handleSeleccionado = obtenerHandles(seleccionado).find(h => Math.hypot(p.x - h.x, p.y - h.y) < radioAcierto);
             if(handleSeleccionado) return;
         }
         
         seleccionado = elementos.slice().reverse().find(el => {
-            if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 10)/camera.z);
+            if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 15)/camera.z);
             const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
             return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
         });
@@ -366,27 +366,38 @@ socket.on('mover_cursor', d => {
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
 
-canvas.addEventListener('mousedown', start); 
-window.addEventListener('mousemove', e => {
-    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado) return;
-    move(e);
-}); 
+// FIX MÓVIL: Los eventos táctiles ahora están anclados EXCLUSIVAMENTE al canvas.
+canvas.addEventListener('mousedown', start);
+canvas.addEventListener('mousemove', move);
+
+canvas.addEventListener('touchstart', e => { 
+    e.preventDefault(); // Detiene el zoom/scroll nativo instantáneamente
+    start(e); 
+}, {passive: false});
+
+canvas.addEventListener('touchmove', e => { 
+    e.preventDefault(); // Evita el efecto rebote mientras arrastras
+    move(e); 
+}, {passive: false});
+
+canvas.addEventListener('touchend', e => {
+    e.preventDefault();
+    end(e);
+}, {passive: false});
+
 window.addEventListener('mouseup', end);
 
-canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
-window.addEventListener('touchmove', e => { 
-    if(e.target.closest('#toolbar-container') && !dibujando && !isPanning && !seleccionado && !handleSeleccionado) return; 
-    if (e.cancelable) e.preventDefault(); move(e); 
-}, {passive:false});
-window.addEventListener('touchend', end);
+// FIX ANTI-REBOTE: Ignora los cambios de tamaño falsos de la barra de direcciones en el celular
+let lastWidth = window.innerWidth;
+window.addEventListener('resize', () => {
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    // Si estamos en celular y el ancho no cambió (solo se ocultó la URL), lo ignoramos
+    if (isMobile && window.innerWidth === lastWidth) return; 
 
-// FIX ANTI-REBOTE: Solo re-renderizar si el tamaño cambió de verdad (ignora ocultamiento de barra de URL)
-window.onresize = () => { 
-    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-        canvas.width = window.innerWidth; 
-        canvas.height = window.innerHeight; 
-        render(); 
-    }
-};
+    lastWidth = window.innerWidth;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    render();
+});
 
 guardarEstado(); render();
