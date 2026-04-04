@@ -11,15 +11,11 @@ const io = new Server(server, {
 app.use(express.static('public'));
 
 let historialDibujos = [];
-
-// 🔐 LA CONTRASEÑA SECRETA
-const PASSWORD_SALA = "maxigp01";
+const PASSWORD_SALA = "12345";
 
 io.use((socket, next) => {
     const password = socket.handshake.auth.password;
-    if (password === PASSWORD_SALA) {
-        return next();
-    }
+    if (password === PASSWORD_SALA) { return next(); }
     return next(new Error("Contraseña incorrecta"));
 });
 
@@ -41,8 +37,18 @@ io.on('connection', (socket) => {
         io.emit('limpiar_todo');
     });
 
+    // Evento exclusivo para el Láser (No se guarda en el historial, solo se transmite)
+    socket.on('dibujar_laser', (datos) => {
+        socket.broadcast.emit('dibujar_laser', datos);
+    });
+
     socket.on('mover_cursor', (datos) => {
-        socket.broadcast.emit('mover_cursor', { id: socket.id, x: datos.x, y: datos.y });
+        socket.broadcast.emit('mover_cursor', { 
+            id: socket.id, 
+            x: datos.x, 
+            y: datos.y, 
+            nombre: datos.nombre // <-- Ahora transmitimos el nombre
+        });
     });
 
     socket.on('disconnect', () => {
@@ -51,6 +57,4 @@ io.on('connection', (socket) => {
 });
 
 const PUERTO = process.env.PORT || 3000;
-server.listen(PUERTO, () => {
-    console.log(`🚀 Servidor en puerto ${PUERTO}`);
-});
+server.listen(PUERTO, () => console.log(`🚀 Servidor en puerto ${PUERTO}`));
