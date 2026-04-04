@@ -28,7 +28,7 @@ const ProyectoSchema = new mongoose.Schema({
 const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 
 // --- 3. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
-const PASSWORD_SALA = "12345";
+const PASSWORD_SALA = "test";
 
 // Filtro de seguridad: Exigimos contraseña y nombre de sala
 io.use((socket, next) => {
