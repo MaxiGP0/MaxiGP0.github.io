@@ -4,15 +4,13 @@ const miNombre = prompt("👤 Ingresa tu nombre:") || "Anónimo";
 const socket = io({ auth: { password: pass } });
 
 socket.on('connect_error', (err) => {
-    alert("❌ " + err.message);
-    window.location.reload(); 
+    alert("❌ " + err.message); window.location.reload(); 
 });
 
 const canvas = document.getElementById('pizarra');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
@@ -21,76 +19,44 @@ let historialUndo = [], historialRedo = [];
 let historialCargado = false, cambioRealizado = false; 
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 
-let seleccionados = []; 
-let boxSeleccion = null; 
-let handleSeleccionado = null;
-let lastMousePos = { x: 0, y: 0 }; 
+let seleccionados = [], boxSeleccion = null, handleSeleccionado = null, lastMousePos = { x: 0, y: 0 }; 
+let lasersActivos = {}, miLaserId = null;
 
-let lasersActivos = {}; 
-let miLaserId = null;
+// --- NUEVAS VARIABLES PARA SEGUIR USUARIOS ---
+let cursoresData = {}; // Guarda coordenadas reales de amigos
+let siguiendoA = null; // ID del usuario al que la cámara sigue
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- BUCLE DE RENDERIZADO (Game Loop) ---
+// --- BUCLE DE RENDERIZADO ---
 let renderRequerido = true; 
-function pedirRender() {
-    if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); }
-}
+function pedirRender() { if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); } }
 setInterval(pedirRender, 1000/60); 
 
 function throttle(func, limit) {
     let inThrottle;
-    return function() {
-        const args = arguments;
-        if (!inThrottle) {
-            func.apply(this, args); inThrottle = true; setTimeout(() => inThrottle = false, limit);
-        }
-    }
+    return function() { const args = arguments; if (!inThrottle) { func.apply(this, args); inThrottle = true; setTimeout(() => inThrottle = false, limit); } }
 }
-
 const enviarCursor = throttle((x, y) => { socket.emit('mover_cursor', { x, y, nombre: miNombre }); }, 50); 
 
-function guardarEstado() {
-    const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; }));
-    historialUndo.push(snap); if (historialUndo.length > 30) historialUndo.shift(); historialRedo = [];
-}
-
-function aplicarEstado(s) {
-    elementos = s;
-    elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; }});
-    pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos);
-}
+function guardarEstado() { const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; })); historialUndo.push(snap); if (historialUndo.length > 30) historialUndo.shift(); historialRedo = []; }
+function aplicarEstado(s) { elementos = s; elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; }}); pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos); }
 function undo() { if (historialUndo.length <= 1) return; historialRedo.push(historialUndo.pop()); aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1])); }
 function redo() { if (historialRedo.length === 0) return; const p = JSON.parse(historialRedo.pop()); historialUndo.push(JSON.stringify(p)); aplicarEstado(p); }
 
-// --- NUEVO: SISTEMA DE CAPAS (Z-INDEX) ---
-function traerAlFrente() {
-    if (seleccionados.length === 0) return;
-    // Quitamos los seleccionados del array original
-    elementos = elementos.filter(el => !seleccionados.includes(el));
-    // Los ponemos al final para que se dibujen últimos (arriba)
-    elementos.push(...seleccionados);
-    guardarEstado();
-    if(historialCargado) socket.emit('sync_todo', elementos);
-    pedirRender();
-}
+function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
+function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 
-function enviarAlFondo() {
-    if (seleccionados.length === 0) return;
-    // Quitamos los seleccionados
-    elementos = elementos.filter(el => !seleccionados.includes(el));
-    // Los ponemos al principio para que se dibujen primero (abajo de todo)
-    elementos.unshift(...seleccionados);
-    guardarEstado();
-    if(historialCargado) socket.emit('sync_todo', elementos);
-    pedirRender();
+function dejarDeSeguir() {
+    siguiendoA = null;
+    document.getElementById('follow-banner').classList.add('hidden');
 }
+document.getElementById('btn-unfollow').addEventListener('click', dejarDeSeguir);
 
 function subirImagen() {
     const inputFile = document.createElement('input'); inputFile.type = 'file'; inputFile.accept = 'image/*';
     inputFile.onchange = e => {
-        const file = e.target.files[0]; if (!file) return;
-        const reader = new FileReader();
+        const file = e.target.files[0]; if (!file) return; const reader = new FileReader();
         reader.onload = ev => {
             const img = new Image(); img.src = ev.target.result;
             img.onload = () => {
@@ -98,12 +64,10 @@ function subirImagen() {
                 if (w > maxSize || h > maxSize) { if (w > h) { h = (maxSize / w) * h; w = maxSize; } else { w = (maxSize / h) * w; h = maxSize; } }
                 const tempCanvas = document.createElement('canvas'); tempCanvas.width = w; tempCanvas.height = h;
                 const tempCtx = tempCanvas.getContext('2d'); tempCtx.fillStyle = "#ffffff"; tempCtx.fillRect(0,0,w,h); tempCtx.drawImage(img, 0, 0, w, h);
-                const compressedSrc = tempCanvas.toDataURL('image/jpeg', 0.8);
-                const finalImg = new Image(); finalImg.src = compressedSrc;
+                const compressedSrc = tempCanvas.toDataURL('image/jpeg', 0.8); const finalImg = new Image(); finalImg.src = compressedSrc;
                 finalImg.onload = () => {
                     const visualW = w > 300 ? 300 : w; const visualH = (h / w) * visualW;
-                    const centerX = (-camera.x + canvas.width / 2) / camera.z - visualW / 2;
-                    const centerY = (-camera.y + canvas.height / 2) / camera.z - visualH / 2;
+                    const centerX = (-camera.x + canvas.width / 2) / camera.z - visualW / 2; const centerY = (-camera.y + canvas.height / 2) / camera.z - visualH / 2;
                     const obj = { id: Math.random(), type:'image', x: centerX, y: centerY, w: visualW, h: visualH, src: compressedSrc, grosor: 1 };
                     obj.imgObj = finalImg; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender();
                 };
@@ -115,29 +79,15 @@ function subirImagen() {
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.addEventListener('click', () => {
         const id = btn.id;
-        // Botones de acción directa (no cambian de herramienta)
-        if(id === 'btn-export') { exportarJPG(); return; }
-        if(id === 'btn-save') { guardarLocal(); return; }
-        if(id === 'btn-load') { cargarLocal(); return; }
-        if(id === 'btn-clear') { reiniciarLienzo(); return; }
+        if(id === 'btn-export') { exportarJPG(); return; } if(id === 'btn-save') { guardarLocal(); return; }
+        if(id === 'btn-load') { cargarLocal(); return; } if(id === 'btn-clear') { reiniciarLienzo(); return; }
         if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; pedirRender(); return; }
-        if(id === 'btn-undo') { undo(); return; }
-        if(id === 'btn-redo') { redo(); return; }
-        if(id === 'btn-front') { traerAlFrente(); return; } // BOTÓN FRENTE
-        if(id === 'btn-back') { enviarAlFondo(); return; }  // BOTÓN FONDO
+        if(id === 'btn-undo') { undo(); return; } if(id === 'btn-redo') { redo(); return; }
+        if(id === 'btn-front') { traerAlFrente(); return; } if(id === 'btn-back') { enviarAlFondo(); return; }
+        if(id === 'btn-image') { subirImagen(); document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); modo = 'select'; seleccionados = []; pedirRender(); return; } 
         
-        if(id === 'btn-image') {
-            subirImagen(); 
-            document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); 
-            btn.classList.add('active'); modo = 'select'; seleccionados = []; pedirRender(); return;
-        } 
-        
-        // Cambiar de herramienta
         document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); 
-        btn.classList.add('active'); 
-        modo = id.replace('btn-', ''); 
-        seleccionados = []; 
-        pedirRender();
+        btn.classList.add('active'); modo = id.replace('btn-', ''); seleccionados = []; pedirRender();
     });
 });
 
@@ -153,22 +103,33 @@ function getPos(e) {
 }
 
 function obtenerHandles(el) {
-    if (el.type === 'pen') return [];
+    if (el.type === 'pen' || el.type === 'sticky') return [];
     return [{x: el.x, y: el.y, n: 'tl'}, {x: el.x + el.w, y: el.y, n: 'tr'}, {x: el.x, y: el.y + el.h, n: 'bl'}, {x: el.x + el.w, y: el.y + el.h, n: 'br'}];
 }
 
 const start = e => {
     if(e.touches && e.touches.length === 2) {
-        isPanning = false; dibujando = false; seleccionados = [];
+        dejarDeSeguir(); isPanning = false; dibujando = false; seleccionados = [];
         const t1 = e.touches[0], t2 = e.touches[1]; initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         initialCamZ = camera.z; initialCamX = camera.x; initialCamY = camera.y; pinchCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 }; return;
     }
 
     const p = getPos(e);
-    if(modo === 'pan' || e.button === 1) { isPanning = true; startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; return; }
+    if(modo === 'pan' || e.button === 1) { dejarDeSeguir(); isPanning = true; startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; return; }
     if(modo === 'erase') { borrarEn(p); return; }
 
     if(modo === 'select') {
+        // 1. Revisar si tocamos un CURSOR de un amigo para seguirlo
+        for (let id in cursoresData) {
+            const c = cursoresData[id];
+            if (Math.hypot(p.x - c.x, p.y - c.y) < 30 / camera.z) {
+                siguiendoA = id;
+                document.getElementById('follow-name').innerText = c.nombre;
+                document.getElementById('follow-banner').classList.remove('hidden');
+                return; // Cortamos el código aquí para no seleccionar nada
+            }
+        }
+
         if(seleccionados.length === 1) {
             const radioAcierto = 30 / camera.z; 
             handleSeleccionado = obtenerHandles(seleccionados[0]).find(h => Math.hypot(p.x - h.x, p.y - h.y) < radioAcierto);
@@ -185,8 +146,7 @@ const start = e => {
             if (!seleccionados.includes(hit)) seleccionados = [hit];
             lastMousePos = { x: p.x, y: p.y };
         } else {
-            seleccionados = [];
-            boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 };
+            seleccionados = []; boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 };
         }
         pedirRender(); return;
     }
@@ -194,8 +154,17 @@ const start = e => {
     if (modo === 'laser') {
         dibujando = true; miLaserId = Math.random().toString(36).substr(2, 9);
         lasersActivos[miLaserId] = { color: controls.color.value, points: [{x: p.x, y: p.y, t: Date.now()}] };
-        socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: {x: p.x, y: p.y, t: Date.now()} });
-        return;
+        socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: {x: p.x, y: p.y, t: Date.now()} }); return;
+    }
+
+    // --- NUEVO: CREAR NOTA ADHESIVA ---
+    if(modo === 'sticky') {
+        const t = prompt("Escribe en la Nota Adhesiva:");
+        if(t) { 
+            const color = controls.color.value; 
+            const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: color, w: 200, h: 200, grosor: 1 };
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); 
+        } return;
     }
 
     if(modo === 'text') {
@@ -222,10 +191,8 @@ const move = e => {
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
 
     if (modo === 'laser' && dibujando) {
-        const pt = {x: p.x, y: p.y, t: Date.now()};
-        lasersActivos[miLaserId].points.push(pt);
-        socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: pt });
-        return; 
+        const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt);
+        socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: pt }); return; 
     }
 
     if(dibujando && elementoActual) {
@@ -246,11 +213,9 @@ const move = e => {
         } else if (seleccionados.length > 0 && (e.buttons === 1 || e.touches)) {
             const dx = p.x - lastMousePos.x; const dy = p.y - lastMousePos.y;
             seleccionados.forEach(el => {
-                if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } 
-                else { el.x += dx; el.y += dy; }
+                if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } else { el.x += dx; el.y += dy; }
             });
-            lastMousePos = { x: p.x, y: p.y };
-            cambioRealizado = true;
+            lastMousePos = { x: p.x, y: p.y }; cambioRealizado = true;
         }
         pedirRender();
     }
@@ -283,7 +248,8 @@ const end = e => {
 };
 
 canvas.addEventListener('wheel', e => {
-    e.preventDefault(); const zoomSensitivity = 0.001; let newZ = camera.z * Math.exp(-e.deltaY * zoomSensitivity); newZ = Math.max(0.1, Math.min(newZ, 10));
+    e.preventDefault(); dejarDeSeguir();
+    const zoomSensitivity = 0.001; let newZ = camera.z * Math.exp(-e.deltaY * zoomSensitivity); newZ = Math.max(0.1, Math.min(newZ, 10));
     const rect = canvas.getBoundingClientRect(); const mouseX = e.clientX - rect.left, mouseY = e.clientY - rect.top;
     camera.x = mouseX - (mouseX - camera.x) * (newZ / camera.z); camera.y = mouseY - (mouseY - camera.y) * (newZ / camera.z); camera.z = newZ; pedirRender();
 }, { passive: false });
@@ -298,9 +264,80 @@ function borrarEn(p) {
 }
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
-function exportarJPG() { seleccionados = []; pedirRender(); setTimeout(() => { const temp = document.createElement('canvas'); temp.width = canvas.width; temp.height = canvas.height; const t = temp.getContext('2d'); t.fillStyle = "#fefefe"; t.fillRect(0,0,temp.width,temp.height); t.drawImage(canvas, 0, 0); const a = document.createElement('a'); a.download = 'dibujo.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click(); }, 50); }
 function guardarLocal() { const blob = new Blob([JSON.stringify(elementos.map(el=>{const {imgObj,...r}=el; return r;}))], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "cuaderno.json"; a.click(); }
 function cargarLocal() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = e => { const r = new FileReader(); r.onload = ev => { aplicarEstado(JSON.parse(ev.target.result)); guardarEstado(); }; r.readAsText(e.target.files[0]); }; i.click(); }
+
+// --- NUEVO: EXPORTACIÓN PANORÁMICA INTELIGENTE ---
+function exportarJPG() {
+    seleccionados = []; pedirRender();
+    setTimeout(() => {
+        if (elementos.length === 0) return alert("El lienzo está vacío.");
+        
+        // 1. Calcular el tamaño de TODO el dibujo
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        elementos.forEach(el => {
+            if (el.type === 'pen') {
+                el.points.forEach(pt => {
+                    minX = Math.min(minX, pt.x - el.grosor); maxX = Math.max(maxX, pt.x + el.grosor);
+                    minY = Math.min(minY, pt.y - el.grosor); maxY = Math.max(maxY, pt.y + el.grosor);
+                });
+            } else {
+                let x = el.x, y = el.y, w = el.w, h = el.h;
+                if (w < 0) { x += w; w = Math.abs(w); } if (h < 0) { y += h; h = Math.abs(h); }
+                minX = Math.min(minX, x); maxX = Math.max(maxX, x + w);
+                minY = Math.min(minY, y); maxY = Math.max(maxY, y + h);
+            }
+        });
+
+        const padding = 100; // Margen blanco alrededor de la foto
+        minX -= padding; minY -= padding; maxX += padding; maxY += padding;
+        const expW = maxX - minX, expH = maxY - minY;
+
+        if(expW <= 0 || expH <= 0) return;
+
+        // 2. Crear un canvas gigante e invisible en RAM
+        const temp = document.createElement('canvas'); temp.width = expW; temp.height = expH;
+        const t = temp.getContext('2d');
+        t.fillStyle = "#fefefe"; t.fillRect(0,0,temp.width,temp.height);
+        
+        t.save();
+        t.translate(-minX, -minY); // Desplazar el punto cero para que todo quepa en la foto
+        elementos.forEach(el => helperDibujarElemento(t, el, 1)); // Dibujar usando la misma lógica
+        t.restore();
+
+        const a = document.createElement('a'); a.download = 'Pizarra_Completa.jpg'; a.href = temp.toDataURL('image/jpeg', 0.9); a.click();
+    }, 50);
+}
+
+// --- FUNCIÓN DE DIBUJADO UNIVERSAL (Para la pantalla y para exportar JPG) ---
+function helperDibujarElemento(ctxPincel, el, camZ) {
+    ctxPincel.strokeStyle = el.color; ctxPincel.fillStyle = el.color; ctxPincel.lineWidth = el.grosor; ctxPincel.lineCap = "round"; ctxPincel.lineJoin = "round";
+    
+    if(el.type==='pen'){ ctxPincel.beginPath(); el.points.forEach((p,i)=>i===0?ctxPincel.moveTo(p.x,p.y):ctxPincel.lineTo(p.x,p.y)); ctxPincel.stroke(); }
+    else if(el.type==='rect') ctxPincel.strokeRect(el.x, el.y, el.w, el.h);
+    else if(el.type==='line'){ ctxPincel.beginPath(); ctxPincel.moveTo(el.x, el.y); ctxPincel.lineTo(el.x+el.w, el.y+el.h); ctxPincel.stroke(); }
+    else if(el.type==='ellipse'){ ctxPincel.beginPath(); ctxPincel.ellipse(el.x+el.w/2, el.y+el.h/2, Math.abs(el.w/2), Math.abs(el.h/2), 0, 0, Math.PI*2); ctxPincel.stroke(); }
+    else if(el.type==='text'){ ctxPincel.font = "24px Arial"; ctxPincel.textBaseline = "top"; ctxPincel.fillText(el.text, el.x, el.y); }
+    else if(el.type==='image' && el.imgObj) ctxPincel.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
+    else if(el.type==='sticky') {
+        // Sombra de Sticky Note
+        ctxPincel.shadowColor = 'rgba(0,0,0,0.2)'; ctxPincel.shadowBlur = 10/camZ; ctxPincel.shadowOffsetX = 3/camZ; ctxPincel.shadowOffsetY = 3/camZ;
+        ctxPincel.fillRect(el.x, el.y, el.w, el.h); ctxPincel.shadowColor = 'transparent';
+        
+        // Texto con Word Wrap Automático
+        ctxPincel.fillStyle = "#222222"; ctxPincel.font = "bold 18px Arial"; ctxPincel.textBaseline = "top";
+        const words = el.text.split(' '); let line = ''; let testY = el.y + 15;
+        for(let n = 0; n < words.length; n++) {
+            const testLine = line + words[n] + ' ';
+            if (ctxPincel.measureText(testLine).width > el.w - 30 && n > 0) {
+                ctxPincel.fillText(line, el.x + 15, testY); line = words[n] + ' '; testY += 24;
+            } else { line = testLine; }
+        }
+        ctxPincel.fillText(line, el.x + 15, testY);
+        // Autocompletar el alto del cuadro si el texto es muy largo
+        if (testY + 30 > el.y + el.h) el.h = (testY - el.y) + 30; 
+    }
+}
 
 function ejecutarRender() {
     renderRequerido = false; 
@@ -318,7 +355,6 @@ function ejecutarRender() {
 
     [...elementos, elementoActual].forEach(el => {
         if(!el) return;
-        ctx.strokeStyle = el.color; ctx.fillStyle = el.color; ctx.lineWidth = el.grosor; ctx.lineCap = "round"; ctx.lineJoin = "round";
         
         if (el.type !== 'pen' && el.type !== 'line') {
             const minX = Math.min(el.x, el.x + el.w); const maxX = Math.max(el.x, el.x + el.w);
@@ -326,14 +362,8 @@ function ejecutarRender() {
             if (maxX < left || minX > right || maxY < top || minY > bottom) return; 
         }
 
-        if(el.type==='pen'){ ctx.beginPath(); el.points.forEach((p,i)=>i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y)); ctx.stroke(); }
-        else if(el.type==='rect') ctx.strokeRect(el.x, el.y, el.w, el.h);
-        else if(el.type==='line'){ ctx.beginPath(); ctx.moveTo(el.x, el.y); ctx.lineTo(el.x+el.w, el.y+el.h); ctx.stroke(); }
-        else if(el.type==='ellipse'){ ctx.beginPath(); ctx.ellipse(el.x+el.w/2, el.y+el.h/2, Math.abs(el.w/2), Math.abs(el.h/2), 0, 0, Math.PI*2); ctx.stroke(); }
-        else if(el.type==='text'){ ctx.font = "24px Arial"; ctx.textBaseline = "top"; ctx.fillText(el.text, el.x, el.y); }
-        else if(el.type==='image' && el.imgObj) ctx.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
+        helperDibujarElemento(ctx, el, camera.z);
         
-        // DIBUJAR MARCO DE SELECCIÓN (Puede tener varios objetos)
         if(modo==='select' && seleccionados.includes(el)){
             ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z;
             
@@ -346,8 +376,7 @@ function ejecutarRender() {
             }
             
             ctx.setLineDash([]); ctx.fillStyle = "#2196F3";
-            // Puntos de Resize (Solo si hay 1 elemento seleccionado)
-            if (seleccionados.length === 1 && el.type !== 'pen') {
+            if (seleccionados.length === 1 && el.type !== 'pen' && el.type !== 'sticky') {
                 const hSize = 10 / camera.z; 
                 obtenerHandles(el).forEach(h => { ctx.fillRect(h.x - hSize/2, h.y - hSize/2, hSize, hSize); });
             }
@@ -363,19 +392,15 @@ function ejecutarRender() {
     const now = Date.now();
     for (let id in lasersActivos) {
         const l = lasersActivos[id];
-        l.points = l.points.filter(pt => now - pt.t < 1500);
+        l.points = l.points.filter(pt => now - pt.t < 1500); // El láser muere a los 1.5 segundos
         
         if (l.points.length > 0) {
             ctx.beginPath();
-            ctx.strokeStyle = l.color; ctx.lineWidth = 6 / camera.z; 
-            ctx.lineCap = "round"; ctx.lineJoin = "round";
+            ctx.strokeStyle = l.color; ctx.lineWidth = 6 / camera.z; ctx.lineCap = "round"; ctx.lineJoin = "round";
             ctx.shadowBlur = 10 / camera.z; ctx.shadowColor = l.color;
             l.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-            ctx.stroke();
-            ctx.shadowBlur = 0; 
-        } else {
-            delete lasersActivos[id]; 
-        }
+            ctx.stroke(); ctx.shadowBlur = 0; 
+        } else { delete lasersActivos[id]; }
     }
 
     ctx.restore();
@@ -388,8 +413,6 @@ window.addEventListener('keydown', e => {
     }
     if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
     if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); redo(); }
-    
-    // ATAJOS TECLADO CAPAS
     if(e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); traerAlFrente(); }
     if(e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); enviarAlFondo(); }
 });
@@ -412,6 +435,15 @@ socket.on('dibujar_laser', data => {
 
 const cur = {};
 socket.on('mover_cursor', d => {
+    cursoresData[d.id] = d; // Guardar posición real del amigo
+    
+    // Si estamos siguiendo a esta persona, forzamos que nuestra cámara se centre en él
+    if (siguiendoA === d.id) {
+        camera.x = (canvas.width / 2) - (d.x * camera.z);
+        camera.y = (canvas.height / 2) - (d.y * camera.z);
+        pedirRender();
+    }
+
     if(!cur[d.id]){ 
         const v=document.createElement('div'); v.className='cursor-fantasma'; 
         v.setAttribute('data-nombre', d.nombre || "Anónimo"); 
@@ -419,11 +451,9 @@ socket.on('mover_cursor', d => {
     }
     cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; cur[d.id].style.top=(d.y * camera.z + camera.y)+'px';
 });
-socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; }});
+socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; delete cursoresData[id]; if(siguiendoA === id) dejarDeSeguir(); }});
 
-canvas.addEventListener('mousedown', start); 
-canvas.addEventListener('mousemove', move); 
-window.addEventListener('mouseup', end);
+canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
 canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); }, {passive:false});
 canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
