@@ -123,15 +123,29 @@ io.on('connection', async (socket) => {
     }
 
     socket.emit('cargar_historial', proyecto.elementos);
-    socket.on('dibujar', (datos) => socket.to(sala).emit('dibujar', datos));
+
+    // --- SOLUCIÓN DEL BUG DE SINCRONIZACIÓN ---
+    socket.on('dibujar', async (datos) => {
+        // 1. Se lo enviamos en tiempo real a los que ya están adentro
+        socket.to(sala).emit('dibujar', datos);
+        
+        // 2. Lo guardamos en la base de datos para los que entren más tarde
+        await Proyecto.findByIdAndUpdate(sala, { 
+            $push: { elementos: datos }, 
+            fecha: Date.now() 
+        });
+    });
+
     socket.on('sync_todo', async (nuevoHistorial) => {
         socket.to(sala).emit('cargar_historial', nuevoHistorial);
         await Proyecto.findByIdAndUpdate(sala, { elementos: nuevoHistorial, fecha: Date.now() });
     });
+
     socket.on('limpiar_todo', async () => {
         io.to(sala).emit('limpiar_todo');
         await Proyecto.findByIdAndUpdate(sala, { elementos: [] });
     });
+
     socket.on('dibujar_laser', (datos) => socket.to(sala).emit('dibujar_laser', datos));
     socket.on('mover_cursor', (datos) => socket.to(sala).emit('mover_cursor', { id: socket.id, x: datos.x, y: datos.y, nombre: datos.nombre }));
     socket.on('disconnect', () => socket.to(sala).emit('borrar_cursor', socket.id));
