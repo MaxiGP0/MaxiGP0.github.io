@@ -1,8 +1,8 @@
-require('dotenv').config(); // Abre la caja fuerte de las variables ocultas
+require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
-const mongoose = require('mongoose'); // <-- El traductor de Base de Datos
+const mongoose = require('mongoose');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,66 +14,77 @@ app.use(express.static('public'));
 
 // --- 1. CONEXIÓN A LA BASE DE DATOS ---
 const uri = process.env.MONGO_URI;
-
 mongoose.connect(uri)
     .then(() => console.log("🟢 ¡Conectado a MongoDB! El cerebro está en línea."))
     .catch(err => console.error("🔴 Error conectando a MongoDB:", err));
 
-// --- 2. EL "MOLDE" DE LOS PROYECTOS (SCHEMA) ---
-// Así es como se guardará cada plantilla en la nube
+// --- 2. EL "MOLDE" DE LAS SALAS ---
 const ProyectoSchema = new mongoose.Schema({
-    nombre: String,          // Nombre del archivo (ej. "Mapa Mental")
-    elementos: Array,        // Aquí guardaremos el JSON gigante de los dibujos
+    _id: String,             // El ID será el nombre de la sala (ej: "universidad")
+    elementos: { type: Array, default: [] }, // El JSON de los dibujos
     fecha: { type: Date, default: Date.now }
 });
-
-// Creamos el modelo basado en el molde
 const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
-// ----------------------------------------------
 
-
-// Por ahora mantenemos esta variable en RAM para que tu pizarra actual 
-// siga funcionando mientras terminamos de armar el sistema de archivos.
-let historialDibujos = []; 
+// --- 3. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
 const PASSWORD_SALA = "12345";
 
+// Filtro de seguridad al entrar
 io.use((socket, next) => {
-    const password = socket.handshake.auth.password;
-    if (password === PASSWORD_SALA) { return next(); }
-    return next(new Error("Contraseña incorrecta"));
+    const { password, salaId } = socket.handshake.auth;
+    if (password === PASSWORD_SALA && salaId) {
+        socket.salaId = salaId; // Le pegamos una etiqueta al usuario con su sala
+        return next();
+    }
+    return next(new Error("Contraseña incorrecta o sin sala"));
 });
 
-io.on('connection', (socket) => {
-    socket.emit('cargar_historial', historialDibujos);
+io.on('connection', async (socket) => {
+    const sala = socket.salaId;
+    
+    // 1. Metemos al usuario en su "habitación" privada
+    socket.join(sala);
+    console.log(`👤 Usuario entró a la sala: ${sala}`);
 
+    // 2. Buscamos si esta sala ya existía en la Base de Datos
+    let proyecto = await Proyecto.findById(sala);
+    if (!proyecto) {
+        // Si es una sala nueva, la creamos en blanco en la base de datos
+        proyecto = await Proyecto.create({ _id: sala, elementos: [] });
+    }
+
+    // 3. Le enviamos los dibujos guardados SOLO a este usuario
+    socket.emit('cargar_historial', proyecto.elementos);
+
+    // 4. Cuando dibuja, retransmitimos SOLO a los que están en su misma sala
     socket.on('dibujar', (datos) => {
-        historialDibujos.push(datos);
-        socket.broadcast.emit('dibujar', datos);
+        socket.to(sala).emit('dibujar', datos);
     });
 
-    socket.on('sync_todo', (nuevoHistorial) => {
-        historialDibujos = nuevoHistorial;
-        socket.broadcast.emit('cargar_historial', historialDibujos);
-    });
-
-    socket.on('limpiar_todo', () => {
-        historialDibujos = [];
-        io.emit('limpiar_todo');
-    });
-
-    socket.on('dibujar_laser', (datos) => {
-        socket.broadcast.emit('dibujar_laser', datos);
-    });
-
-    socket.on('mover_cursor', (datos) => {
-        socket.broadcast.emit('mover_cursor', { 
-            id: socket.id, x: datos.x, y: datos.y, nombre: datos.nombre 
+    // 5. Sincronización y AUTOGUARDADO MÁGICO en MongoDB
+    socket.on('sync_todo', async (nuevoHistorial) => {
+        socket.to(sala).emit('cargar_historial', nuevoHistorial);
+        
+        // Guardamos en el disco duro de la nube
+        await Proyecto.findByIdAndUpdate(sala, { 
+            elementos: nuevoHistorial, 
+            fecha: Date.now() 
         });
     });
 
-    socket.on('disconnect', () => {
-        socket.broadcast.emit('borrar_cursor', socket.id);
+    // 6. Si limpian la pizarra, borramos los datos en MongoDB
+    socket.on('limpiar_todo', async () => {
+        io.to(sala).emit('limpiar_todo');
+        await Proyecto.findByIdAndUpdate(sala, { elementos: [] });
     });
+
+    // El láser y los cursores no se guardan en la BD, solo se retransmiten en la sala
+    socket.on('dibujar_laser', (datos) => socket.to(sala).emit('dibujar_laser', datos));
+    socket.on('mover_cursor', (datos) => {
+        socket.to(sala).emit('mover_cursor', { id: socket.id, x: datos.x, y: datos.y, nombre: datos.nombre });
+    });
+
+    socket.on('disconnect', () => socket.to(sala).emit('borrar_cursor', socket.id));
 });
 
 const PUERTO = process.env.PORT || 3000;
