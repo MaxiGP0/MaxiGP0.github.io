@@ -1,13 +1,20 @@
+// --- VERIFICACIÓN DE SEGURIDAD ---
+const token = localStorage.getItem('token_cuaderno');
+if (!token) window.location.href = 'login.html';
+
 const urlParams = new URLSearchParams(window.location.search);
 let miSala = urlParams.get('sala');
 if (!miSala) { miSala = Math.random().toString(36).substr(2, 6); window.location.href = `?sala=${miSala}`; }
 
-const pass = prompt(`🚪 Entrando a la sala: [ ${miSala} ]\n🔐 Contraseña:`);
-const miNombre = prompt("👤 Tu nombre:") || "Anónimo";
-const socket = io({ auth: { password: pass, salaId: miSala } });
+const miNombre = localStorage.getItem('nombre_usuario') || "Usuario";
+const socket = io({ auth: { token: token, salaId: miSala } });
 
-socket.on('connect_error', (err) => { alert("❌ " + err.message); window.location.href='index.html'; });
+socket.on('connect_error', (err) => { 
+    alert("❌ Tu sesión ha caducado o no tienes permiso para entrar a esta sala."); 
+    window.location.href = 'login.html'; 
+});
 
+// --- LÓGICA DE LA PIZARRA ---
 const canvas = document.getElementById('pizarra');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 canvas.width = window.innerWidth; canvas.height = window.innerHeight;
@@ -26,6 +33,7 @@ let isPenEraser = false;
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
+// Limpiador de Usuarios Fantasma
 setInterval(() => {
     const now = Date.now();
     for (let id in cursoresData) {
@@ -99,10 +107,7 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home'].includes(id)) {
             if(id==='btn-export') exportarJPG(); if(id==='btn-clear') reiniciarLienzo();
             if(id==='btn-undo') undo(); if(id==='btn-redo') redo(); if(id==='btn-front') traerAlFrente(); if(id==='btn-back') enviarAlFondo();
-            
-            // FIX: Le damos la instrucción a JavaScript de volver a la pantalla de inicio
             if(id==='btn-home') window.location.href = 'index.html'; 
-            
             return;
         }
         if(id === 'btn-image') { subirImagen(); return; }
