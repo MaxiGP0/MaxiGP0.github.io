@@ -10,7 +10,6 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
-// NUEVO: Esto le permite al servidor leer datos JSON que le enviaremos para renombrar
 app.use(express.json()); 
 app.use(express.static('public'));
 
@@ -20,10 +19,10 @@ mongoose.connect(uri)
     .then(() => console.log("🟢 ¡Conectado a MongoDB! El cerebro está en línea."))
     .catch(err => console.error("🔴 Error conectando a MongoDB:", err));
 
-// --- 2. EL "MOLDE" DE LAS SALAS (ACTUALIZADO) ---
+// --- 2. EL "MOLDE" DE LAS SALAS ---
 const ProyectoSchema = new mongoose.Schema({
     _id: String,             
-    nombre: { type: String, default: 'Pizarra Sin Nombre' }, // <-- NUEVO: El nombre visual
+    nombre: { type: String, default: 'Pizarra Sin Nombre' }, 
     elementos: { type: Array, default: [] }, 
     fecha: { type: Date, default: Date.now }
 });
@@ -31,27 +30,30 @@ const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 
 // --- 3. LAS PUERTAS API (PARA EL DASHBOARD) ---
 
-// Puerta para Leer los proyectos
+// Leer
 app.get('/api/proyectos', async (req, res) => {
     try {
-        // Ahora también le pedimos a MongoDB que nos traiga el campo 'nombre'
         const proyectos = await Proyecto.find({}, '_id nombre fecha').sort({ fecha: -1 });
         res.json(proyectos);
-    } catch (error) {
-        res.status(500).json({ error: 'Error al cargar' });
-    }
+    } catch (error) { res.status(500).json({ error: 'Error al cargar' }); }
 });
 
-// NUEVA PUERTA: Para renombrar un proyecto
+// Renombrar
 app.put('/api/proyectos/:id', async (req, res) => {
     try {
-        const idSala = req.params.id;
-        const nuevoNombre = req.body.nombre;
-        // Buscamos la sala por su ID y le actualizamos solo el nombre
-        await Proyecto.findByIdAndUpdate(idSala, { nombre: nuevoNombre });
+        await Proyecto.findByIdAndUpdate(req.params.id, { nombre: req.body.nombre });
         res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ error: 'Error al renombrar' });
+    } catch (error) { res.status(500).json({ error: 'Error al renombrar' }); }
+});
+
+// NUEVA PUERTA: Borrar un proyecto
+app.delete('/api/proyectos/:id', async (req, res) => {
+    try {
+        // Le pedimos a MongoDB que elimine el documento por completo
+        await Proyecto.findByIdAndDelete(req.params.id);
+        res.json({ success: true });
+    } catch (error) { 
+        res.status(500).json({ error: 'Error al borrar' }); 
     }
 });
 
