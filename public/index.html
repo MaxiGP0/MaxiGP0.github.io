@@ -23,16 +23,18 @@
         .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
         
         .card-icon { font-size: 40px; margin-bottom: 15px; background: #e3f2fd; width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
-        .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 30px; }
+        .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 60px; }
         .card-date { font-size: 13px; color: #888; margin: 0; }
 
-        /* NUEVO BOTÓN DE EDITAR */
-        .btn-edit {
-            position: absolute; top: 20px; right: 20px; background: #f0f0f0; border: none;
-            border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-size: 16px;
-            display: flex; align-items: center; justify-content: center; transition: 0.2s;
+        /* Contenedor de botones (Editar y Borrar) */
+        .card-actions { position: absolute; top: 15px; right: 15px; display: flex; gap: 5px; }
+        
+        .btn-action {
+            background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px;
+            cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: 0.2s;
         }
-        .btn-edit:hover { background: #ddd; transform: scale(1.1); }
+        .btn-action:hover { background: #ddd; transform: scale(1.1); }
+        .btn-delete:hover { background: #ffebee; } /* Fondo rojizo al pasar el mouse por el basurero */
 
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
     </style>
@@ -56,29 +58,39 @@
             window.location.href = `pizarra.html?sala=${nuevoId}`;
         }
 
-        // NUEVA FUNCIÓN: Para cambiar el nombre
         async function renombrarProyecto(event, idSala, nombreActual) {
-            // Esto evita que al hacer clic en el botón de editar, el navegador entre a la sala
             event.preventDefault(); 
             event.stopPropagation(); 
-
-            // Le pedimos al usuario el nuevo nombre
             const nuevoNombre = prompt("Escribe el nuevo nombre para este proyecto:", nombreActual);
             
-            // Si el usuario escribió algo y no canceló
             if (nuevoNombre && nuevoNombre.trim() !== "") {
                 try {
-                    // Enviamos la petición a la nueva puerta del servidor
                     await fetch(`/api/proyectos/${idSala}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ nombre: nuevoNombre.trim() })
                     });
-                    
-                    // Recargamos la lista para ver el nuevo nombre
+                    cargarProyectos();
+                } catch (error) { alert("Hubo un error al guardar el nombre."); }
+            }
+        }
+
+        // NUEVA FUNCIÓN: Para borrar el proyecto
+        async function borrarProyecto(event, idSala, nombreActual) {
+            event.preventDefault(); 
+            event.stopPropagation(); 
+            
+            // Confirmación de seguridad
+            const seguro = confirm(`⚠️ ¿Estás completamente seguro de que quieres borrar "${nombreActual}"?\n\nEsta acción no se puede deshacer.`);
+            
+            if (seguro) {
+                try {
+                    // Le decimos a la API que ejecute la orden DELETE
+                    await fetch(`/api/proyectos/${idSala}`, { method: 'DELETE' });
+                    // Recargamos la cuadrícula
                     cargarProyectos();
                 } catch (error) {
-                    alert("Hubo un error al guardar el nombre.");
+                    alert("Hubo un error al borrar el proyecto.");
                 }
             }
         }
@@ -98,8 +110,6 @@
                 proyectos.forEach(proj => {
                     const fechaObj = new Date(proj.fecha);
                     const fechaStr = fechaObj.toLocaleDateString() + ' a las ' + fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    
-                    // Si tiene nombre usamos el nombre, si no, usamos la frase "Sala: [ID]"
                     const nombreMostrar = proj.nombre && proj.nombre !== 'Pizarra Sin Nombre' ? proj.nombre : `Sala: ${proj._id}`;
 
                     const card = document.createElement('a');
@@ -110,7 +120,11 @@
                         <div class="card-icon">🎨</div>
                         <h3 class="card-title">${nombreMostrar}</h3>
                         <p class="card-date">Última edición: ${fechaStr}</p>
-                        <button class="btn-edit" onclick="renombrarProyecto(event, '${proj._id}', '${nombreMostrar}')" title="Renombrar">✏️</button>
+                        
+                        <div class="card-actions">
+                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreMostrar}')" title="Renombrar">✏️</button>
+                            <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreMostrar}')" title="Borrar">🗑️</button>
+                        </div>
                     `;
                     grid.appendChild(card);
                 });
