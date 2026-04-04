@@ -6,8 +6,41 @@
     <meta name="color-scheme" content="light only">
     <title>Pizarra | Cuaderno Pro</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        /* NUEVO: Estilos para el sistema de Zoom */
+        #pantalla-espera {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #f4f7f6; z-index: 99999; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center;
+        }
+        #pantalla-espera h2 { color: #333; margin-bottom: 10px; }
+        #pantalla-espera p { color: #666; font-size: 18px; }
+        #btn-cancelar { margin-top: 20px; padding: 10px 20px; background: #e0e0e0; border: none; border-radius: 20px; cursor: pointer; }
+
+        #contenedor-notificaciones {
+            position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px;
+        }
+        .toast {
+            background: white; padding: 15px 20px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.15);
+            border-left: 5px solid #2196F3; animation: slideIn 0.3s ease-out; display: flex; flex-direction: column; gap: 10px;
+        }
+        .toast-btns { display: flex; gap: 10px; }
+        .btn-aceptar { background: #4caf50; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
+        .btn-rechazar { background: #f44336; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+    </style>
 </head>
 <body>
+    
+    <div id="pantalla-espera">
+        <div style="font-size: 50px; margin-bottom: 20px;">🚪</div>
+        <h2 id="texto-espera">Conectando a la sala...</h2>
+        <p>Código: <b id="codigo-sala-ui"></b></p>
+        <button id="btn-cancelar" onclick="window.location.href='index.html'">Volver al Inicio</button>
+    </div>
+
+    <div id="contenedor-notificaciones"></div>
+
     <div id="follow-banner" class="hidden">
         <span>👀 Siguiendo a <b id="follow-name"></b></span>
         <button id="btn-unfollow">Detener</button>
@@ -15,6 +48,7 @@
 
     <div id="user-list-container">
         <h3>👥 En línea</h3>
+        <p id="codigo-compartir" style="font-size: 12px; color: #888; text-align: center; margin-bottom: 10px;">Código: <b id="sala-id-display"></b></p>
         <div id="user-list"></div>
     </div>
 
