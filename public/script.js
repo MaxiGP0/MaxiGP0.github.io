@@ -11,7 +11,6 @@ canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 
-// --- MOTOR DE HISTORIAL (UNDO/REDO) ---
 let historialUndo = []; 
 let historialRedo = [];
 let historialCargado = false, cambioRealizado = false;
@@ -27,10 +26,20 @@ function guardarEstado() {
     historialRedo = []; 
 }
 
+// FIX: Aplicar Estado (Recarga imágenes correctamente)
 function aplicarEstado(snapshotJSON) {
-    const data = JSON.parse(snapshotJSON);
+    if (!snapshotJSON) return;
+    const data = typeof snapshotJSON === 'string' ? JSON.parse(snapshotJSON) : snapshotJSON;
+    if (!Array.isArray(data)) return;
+    
     elementos = data;
-    elementos.forEach(el => { if(el.type === 'image'){ el.imgObj = new Image(); el.imgObj.src = el.src; }});
+    elementos.forEach(el => { 
+        if(el.type === 'image' && el.src){ 
+            el.imgObj = new Image(); 
+            el.imgObj.onload = pedirRender; // Obliga a redibujar cuando la imagen esté lista
+            el.imgObj.src = el.src; 
+        }
+    });
     pedirRender();
     if(historialCargado) socket.emit('sync_todo', elementos);
 }
@@ -49,7 +58,6 @@ function redo() {
     aplicarEstado(siguiente);
 }
 
-// --- VARIABLES DE INTERACCIÓN ---
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 let seleccionados = [], boxSeleccion = null, handleSeleccionado = null, lastMousePos = { x: 0, y: 0 };
 let lasersActivos = {}, miLaserId = null;
@@ -57,12 +65,10 @@ let cursoresData = {}, siguiendoA = null, ultimoClickTime = 0;
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// RENDER LOOP
 let renderRequerido = true;
 function pedirRender() { if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); } }
 setInterval(pedirRender, 1000/60);
 
-// EDITOR DE TEXTO
 function mostrarEditorTexto(valorInicial, callback) {
     const overlay = document.createElement('div'); overlay.id = 'text-editor-overlay';
     const modal = document.createElement('div'); modal.className = 'editor-modal';
@@ -100,11 +106,9 @@ const enviarCursor = (() => {
     return (x, y) => { if (!inThrottle) { socket.emit('mover_cursor', { x, y, nombre: miNombre }); inThrottle = true; setTimeout(() => inThrottle = false, 50); } }
 })();
 
-// CAPAS
 function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 
-// BOTONES
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.onclick = () => {
         const id = btn.id;
@@ -156,10 +160,12 @@ const start = e => {
             const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
             return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
         });
+
         if (dif < 300 && hit && (hit.type === 'text' || hit.type === 'sticky')) {
             mostrarEditorTexto(hit.text, (nuevo) => { hit.text = nuevo; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); });
             return;
         }
+
         if(hit) {
             if (!seleccionados.includes(hit)) seleccionados = [hit];
             lastMousePos = { x: p.x, y: p.y };
@@ -254,10 +260,47 @@ function borrarEn(p) {
         const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
         return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
     });
-    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
+    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos); }
 }
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
+
+// FIX: Guardado y Cargado a prueba de fallos
+function guardarLocal() { 
+    const blob = new Blob([JSON.stringify(elementos.map(el=>{const {imgObj,...r}=el; return r;}))], {type:"application/json"}); 
+    const a = document.createElement('a'); 
+    a.href = URL.createObjectURL(blob); 
+    a.download = "Pizarra_Proyecto.json"; 
+    document.body.appendChild(a); // Vital para que funcione en móviles
+    a.click(); 
+    document.body.removeChild(a);
+}
+
+function cargarLocal() { 
+    const i = document.createElement('input'); 
+    i.type = 'file'; 
+    i.accept = '.json'; 
+    i.style.display = 'none';
+    document.body.appendChild(i); // Vital para que el navegador no lo borre antes de abrir
+
+    i.onchange = e => { 
+        const file = e.target.files[0];
+        if(!file) return;
+        const r = new FileReader(); 
+        r.onload = ev => { 
+            try {
+                aplicarEstado(ev.target.result); 
+                guardarEstado(); 
+            } catch(err) {
+                alert("Error: El archivo de la pizarra es inválido o está dañado.");
+            }
+            document.body.removeChild(i);
+        }; 
+        r.readAsText(file); 
+    }; 
+    i.click(); 
+}
+
 function exportarJPG() {
     seleccionados = []; pedirRender();
     setTimeout(() => {
@@ -312,6 +355,7 @@ function ejecutarRender() {
     for(let y = sY; y < (canvas.height-camera.y)/camera.z + stp; y += stp) { ctx.moveTo((-camera.x/camera.z), y); ctx.lineTo((canvas.width-camera.x)/camera.z, y); }
     ctx.stroke();
     [...elementos, elementoActual].forEach(el => { if(!el) return; helperDibujarElemento(ctx, el, camera.z); if(modo==='select' && seleccionados.includes(el)){ ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z; if(el.type==='pen'){ const xs=el.points.map(pt=>pt.x), ys=el.points.map(pt=>pt.y); ctx.strokeRect(Math.min(...xs)-5, Math.min(...ys)-5, Math.max(...xs)-Math.min(...xs)+10, Math.max(...ys)-Math.min(...ys)+10); } else ctx.strokeRect(el.x, el.y, el.w, el.h); ctx.setLineDash([]); } });
+    if (boxSeleccion) { ctx.fillStyle = "rgba(33, 150, 243, 0.1)"; ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 1/camera.z; ctx.fillRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); ctx.strokeRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); }
     const now = Date.now();
     for (let id in lasersActivos) {
         const lr = lasersActivos[id]; lr.points = lr.points.filter(pt => now - pt.t < 1500);
@@ -330,7 +374,7 @@ window.addEventListener('keydown', e => {
 
 socket.on('dibujar', o => { if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; } else { elementos.push(o); pedirRender(); } });
 socket.on('cargar_historial', h => { elementos = h; historialCargado = true; elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); pedirRender(); if(historialUndo.length===0) guardarEstado(); });
-socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; pedirRender(); });
+socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarEstado(); pedirRender(); });
 socket.on('dibujar_laser', d => { if(!lasersActivos[d.id]) lasersActivos[d.id] = { color: d.color, points: [] }; lasersActivos[d.id].points.push(d.pt); });
 socket.on('mover_cursor', d => {
     cursoresData[d.id] = { x: d.x, y: d.y, nombre: d.nombre };
@@ -361,6 +405,5 @@ canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove'
 canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); }, {passive:false});
 canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
-
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; pedirRender(); });
 guardarEstado(); requestAnimationFrame(ejecutarRender);
