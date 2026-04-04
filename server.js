@@ -13,13 +13,11 @@ const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } 
 app.use(express.json()); 
 app.use(express.static('public'));
 
-// --- CONEXIÓN A LA BASE DE DATOS ---
 const uri = process.env.MONGO_URI;
 mongoose.connect(uri)
     .then(() => console.log("🟢 ¡Conectado a MongoDB! El cerebro está en línea."))
     .catch(err => console.error("🔴 Error conectando a MongoDB:", err));
 
-// --- MOLDES ---
 const UsuarioSchema = new mongoose.Schema({
     nombre: { type: String, required: true },
     email: { type: String, required: true, unique: true },
@@ -39,7 +37,6 @@ const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 
 const LLAVE_SECRETA_JWT = process.env.JWT_SECRET || 'mi_llave_secreta_temporal_123';
 
-// --- RUTAS DE AUTENTICACIÓN ---
 app.post('/api/auth/registro', async (req, res) => {
     try {
         const { nombre, email, password } = req.body;
@@ -63,7 +60,6 @@ app.post('/api/auth/login', async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error al iniciar sesión.' }); }
 });
 
-// --- EL GUARDIA DE SEGURIDAD PARA EL DASHBOARD ---
 const verificarToken = (req, res, next) => {
     const token = req.headers['authorization'];
     if (!token) return res.status(401).json({ error: 'Acceso denegado' });
@@ -74,7 +70,6 @@ const verificarToken = (req, res, next) => {
     } catch (error) { res.status(400).json({ error: 'Token inválido' }); }
 };
 
-// --- PUERTAS API PROTEGIDAS ---
 app.get('/api/proyectos', verificarToken, async (req, res) => {
     try {
         const proyectos = await Proyecto.find({ propietarioId: req.usuario.id }, '_id nombre fecha').sort({ fecha: -1 });
@@ -100,7 +95,7 @@ app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error al borrar' }); }
 });
 
-// --- LÓGICA DE MULTIJUGADOR (SOCKET.IO) PROTEGIDA ---
+// --- LÓGICA DE MULTIJUGADOR ESTILO ZOOM ---
 io.use((socket, next) => {
     const { token, salaId } = socket.handshake.auth;
     if (!token || !salaId) return next(new Error("Sin Pase VIP"));
@@ -114,26 +109,55 @@ io.use((socket, next) => {
 
 io.on('connection', async (socket) => {
     const sala = socket.salaId;
-    socket.join(sala);
-    console.log(`👤 ${socket.usuario.nombre} entró a la sala: ${sala}`);
-
     let proyecto = await Proyecto.findById(sala);
+    
+    // Si la sala no existe, el que la crea es el dueño
     if (!proyecto) { 
         proyecto = await Proyecto.create({ _id: sala, elementos: [], propietarioId: socket.usuario.id }); 
     }
 
-    socket.emit('cargar_historial', proyecto.elementos);
+    const esElDueño = proyecto.propietarioId === socket.usuario.id;
 
-    // --- SOLUCIÓN DEL BUG DE SINCRONIZACIÓN ---
-    socket.on('dibujar', async (datos) => {
-        // 1. Se lo enviamos en tiempo real a los que ya están adentro
-        socket.to(sala).emit('dibujar', datos);
+    if (esElDueño) {
+        // Si es el dueño, entra directo
+        socket.join(sala);
+        console.log(`👑 Dueño ${socket.usuario.nombre} entró a la sala: ${sala}`);
+        socket.emit('acceso_permitido', proyecto.elementos);
+    } else {
+        // Si es invitado, entra a un "Limbo" personal y manda notificación
+        socket.join(socket.id); 
+        console.log(`⏳ Invitado ${socket.usuario.nombre} tocando la puerta en: ${sala}`);
+        socket.emit('esperando_aprobacion');
         
-        // 2. Lo guardamos en la base de datos para los que entren más tarde
-        await Proyecto.findByIdAndUpdate(sala, { 
-            $push: { elementos: datos }, 
-            fecha: Date.now() 
+        // Le avisa a los que están en la sala (al dueño) que alguien quiere entrar
+        socket.to(sala).emit('alguien_quiere_entrar', { 
+            guestId: socket.id, 
+            nombre: socket.usuario.nombre 
         });
+    }
+
+    // El dueño responde a la solicitud
+    socket.on('responder_acceso', async ({ guestId, aprobado }) => {
+        // Verificamos por seguridad que el que responde sea realmente el dueño
+        const p = await Proyecto.findById(sala);
+        if (p.propietarioId !== socket.usuario.id) return; 
+
+        const guestSocket = io.sockets.sockets.get(guestId);
+        if (!guestSocket) return;
+
+        if (aprobado) {
+            guestSocket.join(sala);
+            guestSocket.emit('acceso_permitido', p.elementos);
+            console.log(`✅ ${guestSocket.usuario.nombre} fue aceptado en: ${sala}`);
+        } else {
+            guestSocket.emit('acceso_denegado');
+            console.log(`❌ ${guestSocket.usuario.nombre} fue rechazado en: ${sala}`);
+        }
+    });
+
+    socket.on('dibujar', async (datos) => {
+        socket.to(sala).emit('dibujar', datos);
+        await Proyecto.findByIdAndUpdate(sala, { $push: { elementos: datos }, fecha: Date.now() });
     });
 
     socket.on('sync_todo', async (nuevoHistorial) => {
