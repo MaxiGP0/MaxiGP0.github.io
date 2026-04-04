@@ -5,6 +5,7 @@ const urlParams = new URLSearchParams(window.location.search);
 let miSala = urlParams.get('sala');
 if (!miSala) { miSala = Math.random().toString(36).substr(2, 6); window.location.href = `?sala=${miSala}`; }
 
+// Mostramos el código de la sala en la UI
 document.getElementById('codigo-sala-ui').innerText = miSala;
 document.getElementById('sala-id-display').innerText = miSala;
 
@@ -15,17 +16,23 @@ socket.on('connect_error', (err) => {
     alert("❌ Tu sesión ha caducado."); window.location.href = 'login.html'; 
 });
 
+// --- NUEVA LÓGICA ESTILO ZOOM ---
+
+// Si el servidor dice que somos invitados y debemos esperar
 socket.on('esperando_aprobacion', () => {
     document.getElementById('texto-espera').innerText = "⏳ Esperando a que el dueño te deje entrar...";
 });
 
+// Si el servidor nos rechaza
 socket.on('acceso_denegado', () => {
     document.getElementById('texto-espera').innerText = "❌ El dueño ha rechazado tu solicitud.";
     document.getElementById('btn-cancelar').style.background = "#2196F3";
     document.getElementById('btn-cancelar').style.color = "white";
 });
 
+// Si somos el dueño o si nos acaban de aceptar
 socket.on('acceso_permitido', (historial) => {
+    // Escondemos la pantalla de espera y cargamos el lienzo
     document.getElementById('pantalla-espera').style.display = 'none';
     elementos = historial;
     historialCargado = true;
@@ -34,6 +41,7 @@ socket.on('acceso_permitido', (historial) => {
     if(historialUndo.length===0) guardarEstado();
 });
 
+// EVENTO PARA EL DUEÑO: Alguien toca la puerta
 socket.on('alguien_quiere_entrar', (data) => {
     const contenedor = document.getElementById('contenedor-notificaciones');
     const toast = document.createElement('div');
@@ -46,20 +54,25 @@ socket.on('alguien_quiere_entrar', (data) => {
         </div>
     `;
     
+    // Función de Aceptar
     toast.querySelector('.btn-aceptar').onclick = () => {
         socket.emit('responder_acceso', { guestId: data.guestId, aprobado: true });
         toast.remove();
     };
     
+    // Función de Rechazar
     toast.querySelector('.btn-rechazar').onclick = () => {
         socket.emit('responder_acceso', { guestId: data.guestId, aprobado: false });
         toast.remove();
     };
 
     contenedor.appendChild(toast);
+    
+    // El aviso desaparece solo después de 30 segundos si el dueño lo ignora
     setTimeout(() => { if(toast.parentNode) toast.remove(); }, 30000);
 });
 
+// --- EL RESTO DE TU LÓGICA DE DIBUJO ---
 const canvas = document.getElementById('pizarra');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 canvas.width = window.innerWidth; canvas.height = window.innerHeight;
@@ -141,12 +154,6 @@ const enviarCursor = (() => {
     let inThrottle;
     return (x, y) => { if (!inThrottle) { socket.emit('mover_cursor', { x, y, nombre: miNombre }); inThrottle = true; setTimeout(() => inThrottle = false, 50); } }
 })();
-
-// NUEVO: El "Latido" (Heartbeat)
-// Le dice al servidor dónde estamos cada 4 segundos aunque no toquemos la pantalla
-setInterval(() => {
-    enviarCursor(miPosicionMundo.x, miPosicionMundo.y);
-}, 4000);
 
 function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
@@ -418,7 +425,7 @@ window.addEventListener('keydown', e => {
 });
 
 socket.on('dibujar', o => { if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; } else { elementos.push(o); pedirRender(); } });
-socket.on('cargar_historial', h => { /* Carga en acceso_permitido */ });
+socket.on('cargar_historial', h => { /* Esta línea ya no se usa aquí porque el servidor lo manda con acceso_permitido */ });
 socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; guardarEstado(); pedirRender(); });
 socket.on('dibujar_laser', d => { if(!lasersActivos[d.id]) lasersActivos[d.id] = { color: d.color, points: [] }; lasersActivos[d.id].points.push(d.pt); });
 
