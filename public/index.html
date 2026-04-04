@@ -26,7 +26,6 @@
         .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 60px; }
         .card-date { font-size: 13px; color: #888; margin: 0; }
 
-        /* Contenedor de botones (Editar y Borrar) */
         .card-actions { position: absolute; top: 15px; right: 15px; display: flex; gap: 5px; }
         
         .btn-action {
@@ -34,7 +33,7 @@
             cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: 0.2s;
         }
         .btn-action:hover { background: #ddd; transform: scale(1.1); }
-        .btn-delete:hover { background: #ffebee; } /* Fondo rojizo al pasar el mouse por el basurero */
+        .btn-delete:hover { background: #ffebee; } 
 
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
     </style>
@@ -64,34 +63,44 @@
             const nuevoNombre = prompt("Escribe el nuevo nombre para este proyecto:", nombreActual);
             
             if (nuevoNombre && nuevoNombre.trim() !== "") {
+                // NUEVO: Pedimos la contraseña antes de enviar
+                const pass = prompt("🔐 Ingresa la contraseña maestra para confirmar:");
+                if (!pass) return; // Si cancela, no hacemos nada
+
                 try {
-                    await fetch(`/api/proyectos/${idSala}`, {
+                    const respuesta = await fetch(`/api/proyectos/${idSala}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nombre: nuevoNombre.trim() })
+                        body: JSON.stringify({ nombre: nuevoNombre.trim(), password: pass }) // Enviamos la clave
                     });
+                    
+                    if (!respuesta.ok) throw new Error("Contraseña incorrecta");
                     cargarProyectos();
-                } catch (error) { alert("Hubo un error al guardar el nombre."); }
+                } catch (error) { alert("❌ Error: Contraseña incorrecta o fallo de conexión."); }
             }
         }
 
-        // NUEVA FUNCIÓN: Para borrar el proyecto
         async function borrarProyecto(event, idSala, nombreActual) {
             event.preventDefault(); 
             event.stopPropagation(); 
             
-            // Confirmación de seguridad
             const seguro = confirm(`⚠️ ¿Estás completamente seguro de que quieres borrar "${nombreActual}"?\n\nEsta acción no se puede deshacer.`);
             
             if (seguro) {
+                // NUEVO: Pedimos la contraseña para borrar
+                const pass = prompt("🔐 Ingresa la contraseña maestra para eliminar definitivamente:");
+                if (!pass) return; // Si cancela, no hacemos nada
+
                 try {
-                    // Le decimos a la API que ejecute la orden DELETE
-                    await fetch(`/api/proyectos/${idSala}`, { method: 'DELETE' });
-                    // Recargamos la cuadrícula
+                    const respuesta = await fetch(`/api/proyectos/${idSala}`, { 
+                        method: 'DELETE',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ password: pass }) // Enviamos la clave
+                    });
+
+                    if (!respuesta.ok) throw new Error("Contraseña incorrecta");
                     cargarProyectos();
-                } catch (error) {
-                    alert("Hubo un error al borrar el proyecto.");
-                }
+                } catch (error) { alert("❌ Error: Contraseña incorrecta o fallo de conexión."); }
             }
         }
 
