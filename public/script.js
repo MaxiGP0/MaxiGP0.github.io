@@ -15,19 +15,16 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 let seleccionados = [], boxSeleccion = null, handleSeleccionado = null, lastMousePos = { x: 0, y: 0 };
 let lasersActivos = {}, miLaserId = null;
 
-// GESTIÓN DE USUARIOS
 let cursoresData = {}; 
 let siguiendoA = null;
-let ultimoClickTime = 0; // Para detectar doble clic
+let ultimoClickTime = 0;
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// BUCLE DE RENDERIZADO
 let renderRequerido = true;
 function pedirRender() { if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); } }
 setInterval(pedirRender, 1000/60);
 
-// ACTUALIZAR LISTA DE USUARIOS EN PANTALLA
 function actualizarListaUI() {
     const list = document.getElementById('user-list');
     list.innerHTML = '';
@@ -78,11 +75,9 @@ function aplicarEstado(s) {
     pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos);
 }
 
-// CAPAS
 function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 
-// HERRAMIENTAS
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.onclick = () => {
         const id = btn.id;
@@ -109,17 +104,33 @@ function getPos(e) {
     return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
 }
 
+// --- ZOOM CON RUEDA DEL MOUSE (REINTEGRADO) ---
+canvas.addEventListener('wheel', e => {
+    e.preventDefault(); dejarDeSeguir();
+    const zoomSensitivity = 0.001;
+    let newZ = camera.z * Math.exp(-e.deltaY * zoomSensitivity);
+    newZ = Math.max(0.1, Math.min(newZ, 10));
+
+    const r = canvas.getBoundingClientRect();
+    const sX = canvas.width / r.width, sY = canvas.height / r.height;
+    const mX = (e.clientX - r.left) * sX;
+    const mY = (e.clientY - r.top) * sY;
+
+    camera.x = mX - (mX - camera.x) * (newZ / camera.z);
+    camera.y = mY - (mY - camera.y) * (newZ / camera.z);
+    camera.z = newZ;
+    pedirRender();
+}, { passive: false });
+
 const start = e => {
     const ahora = Date.now();
     const dif = ahora - ultimoClickTime;
     ultimoClickTime = ahora;
-
     if(e.touches && e.touches.length === 2) {
         dejarDeSeguir(); isPanning = false; dibujando = false; seleccionados = [];
         const t1 = e.touches[0], t2 = e.touches[1]; initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
         initialCamZ = camera.z; initialCamX = camera.x; initialCamY = camera.y; pinchCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 }; return;
     }
-
     const p = getPos(e);
     if(modo === 'pan' || e.button === 1) { dejarDeSeguir(); isPanning = true; startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; return; }
     if(modo === 'erase') { borrarEn(p); return; }
@@ -131,27 +142,19 @@ const start = e => {
             return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
         });
 
-        // --- EDITAR TEXTO O STICKY (DOBLE CLIC) ---
         if (dif < 300 && hit && (hit.type === 'text' || hit.type === 'sticky')) {
             const nuevo = prompt("Editar contenido:", hit.text);
-            if (nuevo !== null) {
-                hit.text = nuevo; guardarEstado(); 
-                if(historialCargado) socket.emit('sync_todo', elementos);
-                pedirRender();
-            }
+            if (nuevo !== null) { hit.text = nuevo; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
             return;
         }
 
         if(hit) {
             if (!seleccionados.includes(hit)) seleccionados = [hit];
             lastMousePos = { x: p.x, y: p.y };
-            const hSize = 30 / camera.z;
             if(seleccionados.length === 1 && hit.type !== 'pen' && hit.type !== 'sticky') {
-                handleSeleccionado = [{x:hit.x,y:hit.y,n:'tl'},{x:hit.x+hit.w,y:hit.y,n:'tr'},{x:hit.x,y:hit.y+hit.h,n:'bl'},{x:hit.x+hit.w,y:hit.y+hit.h,n:'br'}].find(h => Math.hypot(p.x - h.x, p.y - h.y) < hSize);
+                handleSeleccionado = [{x:hit.x,y:hit.y,n:'tl'},{x:hit.x+hit.w,y:hit.y,n:'tr'},{x:hit.x,y:hit.y+hit.h,n:'bl'},{x:hit.x+hit.w,y:hit.y+hit.h,n:'br'}].find(h => Math.hypot(p.x - h.x, p.y - h.y) < 30/camera.z);
             }
-        } else {
-            seleccionados = []; boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 };
-        }
+        } else { seleccionados = []; boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 }; }
         pedirRender(); return;
     }
 
@@ -183,7 +186,6 @@ const move = e => {
         camera.x = currentCenter.x - (pinchCenter.x - initialCamX) * (newZ / initialCamZ); camera.y = currentCenter.y - (pinchCenter.y - initialCamY) * (newZ / initialCamZ);
         camera.z = newZ; pedirRender(); return;
     }
-
     const p = getPos(e);
     if(!dibujando && !isPanning) enviarCursor(p.x, p.y); 
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
@@ -192,13 +194,11 @@ const move = e => {
         const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt);
         socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: pt }); return; 
     }
-
     if(dibujando && elementoActual) {
         if(modo === 'pen') elementoActual.points.push({x: p.x, y: p.y});
         else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; }
         pedirRender();
     }
-
     if(modo === 'select') {
         if(boxSeleccion) {
             boxSeleccion.x = Math.min(p.x, boxSeleccion.startX); boxSeleccion.y = Math.min(p.y, boxSeleccion.startY);
@@ -210,9 +210,7 @@ const move = e => {
             cambioRealizado = true;
         } else if (seleccionados.length > 0 && (e.buttons === 1 || e.touches)) {
             const dx = p.x - lastMousePos.x; const dy = p.y - lastMousePos.y;
-            seleccionados.forEach(el => {
-                if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } else { el.x += dx; el.y += dy; }
-            });
+            seleccionados.forEach(el => { if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } else { el.x += dx; el.y += dy; } });
             lastMousePos = { x: p.x, y: p.y }; cambioRealizado = true;
         }
         pedirRender();
@@ -234,7 +232,19 @@ const end = e => {
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null; pedirRender();
 };
 
-// EXPORTACIÓN PANORÁMICA
+function borrarEn(p) {
+    const i = elementos.findLastIndex(el => {
+        if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 15)/camera.z);
+        const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
+        return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
+    });
+    if(i !== -1) { elementos.splice(i, 1); guardarEstado(); pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos); }
+}
+
+function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
+function guardarLocal() { const blob = new Blob([JSON.stringify(elementos.map(el=>{const {imgObj,...r}=el; return r;}))], {type:"application/json"}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "cuaderno.json"; a.click(); }
+function cargarLocal() { const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.onchange = e => { const r = new FileReader(); r.onload = ev => { aplicarEstado(JSON.parse(ev.target.result)); guardarEstado(); }; r.readAsText(e.target.files[0]); }; i.click(); }
+
 function exportarJPG() {
     seleccionados = []; pedirRender();
     setTimeout(() => {
@@ -269,8 +279,7 @@ function helperDibujarElemento(c, el, z) {
             if (c.measureText(test).width > el.w - 30 && n > 0) { c.fillText(line, el.x + 15, tY); line = words[n] + ' '; tY += 24; } 
             else { line = test; }
         }
-        c.fillText(line, el.x + 15, tY);
-        if (tY + 30 > el.y + el.h) el.h = (tY - el.y) + 30; 
+        c.fillText(line, el.x + 15, tY); if (tY + 30 > el.y + el.h) el.h = (tY - el.y) + 30; 
     }
 }
 
@@ -278,79 +287,62 @@ function ejecutarRender() {
     renderRequerido = false; 
     ctx.fillStyle = "#fefefe"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save(); ctx.translate(camera.x, camera.y); ctx.scale(camera.z, camera.z);
-    
-    // Cuadrícula
     ctx.strokeStyle = "#eeeeee"; ctx.lineWidth = 1 / camera.z; ctx.beginPath();
     const stp = 40; const sX = (-camera.x/camera.z) - ((-camera.x/camera.z)%stp) - stp;
     const sY = (-camera.y/camera.z) - ((-camera.y/camera.z)%stp) - stp;
     for(let x = sX; x < (canvas.width-camera.x)/camera.z + stp; x += stp) { ctx.moveTo(x, (-camera.y/camera.z)); ctx.lineTo(x, (canvas.height-camera.y)/camera.z); }
     for(let y = sY; y < (canvas.height-camera.y)/camera.z + stp; y += stp) { ctx.moveTo((-camera.x/camera.z), y); ctx.lineTo((canvas.width-camera.x)/camera.z, y); }
     ctx.stroke();
-
-    [...elementos, elementoActual].forEach(el => {
-        if(!el) return;
-        helperDibujarElemento(ctx, el, camera.z);
-        if(modo==='select' && seleccionados.includes(el)){
-            ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z;
-            if(el.type==='pen'){ const xs=el.points.map(pt=>pt.x), ys=el.points.map(pt=>pt.y); ctx.strokeRect(Math.min(...xs)-5, Math.min(...ys)-5, Math.max(...xs)-Math.min(...xs)+10, Math.max(...ys)-Math.min(...ys)+10); }
-            else ctx.strokeRect(el.x, el.y, el.w, el.h);
-            ctx.setLineDash([]);
-        }
-    });
-
+    [...elementos, elementoActual].forEach(el => { if(!el) return; helperDibujarElemento(ctx, el, camera.z); if(modo==='select' && seleccionados.includes(el)){ ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z; if(el.type==='pen'){ const xs=el.points.map(pt=>pt.x), ys=el.points.map(pt=>pt.y); ctx.strokeRect(Math.min(...xs)-5, Math.min(...ys)-5, Math.max(...xs)-Math.min(...xs)+10, Math.max(...ys)-Math.min(...ys)+10); } else ctx.strokeRect(el.x, el.y, el.w, el.h); ctx.setLineDash([]); } });
     if (boxSeleccion) { ctx.fillStyle = "rgba(33, 150, 243, 0.1)"; ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 1/camera.z; ctx.fillRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); ctx.strokeRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); }
-
     const now = Date.now();
     for (let id in lasersActivos) {
         const lr = lasersActivos[id]; lr.points = lr.points.filter(pt => now - pt.t < 1500);
-        if (lr.points.length > 0) {
-            ctx.beginPath(); ctx.strokeStyle = lr.color; ctx.lineWidth = 6 / camera.z; ctx.lineCap = "round";
-            ctx.shadowBlur = 10 / camera.z; ctx.shadowColor = lr.color;
-            lr.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-            ctx.stroke(); ctx.shadowBlur = 0; 
-        } else delete lasersActivos[id];
+        if (lr.points.length > 0) { ctx.beginPath(); ctx.strokeStyle = lr.color; ctx.lineWidth = 6 / camera.z; ctx.lineCap = "round"; ctx.shadowBlur = 10 / camera.z; ctx.shadowColor = lr.color; lr.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)); ctx.stroke(); ctx.shadowBlur = 0; } else delete lasersActivos[id];
     }
     ctx.restore();
 }
 
-socket.on('dibujar', o => {
-    if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; }
-    else { elementos.push(o); pedirRender(); }
+window.addEventListener('keydown', e => {
+    if((e.key === 'Delete' || e.key === 'Backspace') && seleccionados.length > 0 && modo === 'select') { elementos = elementos.filter(el => !seleccionados.includes(el)); seleccionados = []; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
+    if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+    if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); redo(); }
+    if(e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); traerAlFrente(); }
+    if(e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); enviarAlFondo(); }
 });
-socket.on('cargar_historial', h => {
-    elementos = h; historialCargado = true;
-    elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}});
-    pedirRender(); if(historialUndo.length===0) guardarEstado();
-});
-socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; pedirRender(); });
-socket.on('dibujar_laser', data => { if(!lasersActivos[data.id]) lasersActivos[data.id] = { color: data.color, points: [] }; lasersActivos[data.id].points.push(data.pt); });
 
-const cur = {};
+socket.on('dibujar', o => { if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; } else { elementos.push(o); pedirRender(); } });
+socket.on('cargar_historial', h => { elementos = h; historialCargado = true; elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); pedirRender(); if(historialUndo.length===0) guardarEstado(); });
+socket.on('limpiar_todo', () => { elementos = []; camera={x:0,y:0,z:1}; pedirRender(); });
+socket.on('dibujar_laser', d => { if(!lasersActivos[d.id]) lasersActivos[d.id] = { color: d.color, points: [] }; lasersActivos[d.id].points.push(d.pt); });
 socket.on('mover_cursor', d => {
     cursoresData[d.id] = { x: d.x, y: d.y, nombre: d.nombre };
-    if (siguiendoA === d.id) {
-        camera.x = (canvas.width / 2) - (d.x * camera.z);
-        camera.y = (canvas.height / 2) - (d.y * camera.z);
-    }
-    if(!cur[d.id]){ 
-        const v=document.createElement('div'); v.className='cursor-fantasma'; 
-        v.setAttribute('data-nombre', d.nombre || "Anónimo"); document.getElementById('cursores').appendChild(v); cur[d.id]=v; 
-        actualizarListaUI();
-    }
-    cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; cur[d.id].style.top=(d.y * camera.z + camera.y)+'px';
-    pedirRender();
+    if (siguiendoA === d.id) { camera.x = (canvas.width / 2) - (d.x * camera.z); camera.y = (canvas.height / 2) - (d.y * camera.z); }
+    if(!cur[d.id]){ const v=document.createElement('div'); v.className='cursor-fantasma'; v.setAttribute('data-nombre', d.nombre || "Anónimo"); document.getElementById('cursores').appendChild(v); cur[d.id]=v; actualizarListaUI(); }
+    cur[d.id].style.left=(d.x * camera.z + camera.x)+'px'; cur[d.id].style.top=(d.y * camera.z + camera.y)+'px'; pedirRender();
 });
+socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; } delete cursoresData[id]; if(siguiendoA === id) dejarDeSeguir(); actualizarListaUI(); });
 
-socket.on('borrar_cursor', id => { 
-    if(cur[id]){ cur[id].remove(); delete cur[id]; }
-    delete cursoresData[id]; if(siguiendoA === id) dejarDeSeguir();
-    actualizarListaUI();
-});
+function subirImagen() {
+    const iF = document.createElement('input'); iF.type = 'file'; iF.accept = 'image/*';
+    iF.onchange = e => {
+        const file = e.target.files[0]; if (!file) return; const r = new FileReader();
+        r.onload = ev => {
+            const img = new Image(); img.src = ev.target.result;
+            img.onload = () => {
+                const maxSize = 800; let w = img.width, h = img.height;
+                if (w > maxSize || h > maxSize) { if (w > h) { h = (maxSize / w) * h; w = maxSize; } else { w = (maxSize / h) * w; h = maxSize; } }
+                const tC = document.createElement('canvas'); tC.width = w; tC.height = h; const tX = tC.getContext('2d'); tX.fillStyle = "#ffffff"; tX.fillRect(0,0,w,h); tX.drawImage(img, 0, 0, w, h);
+                const cSrc = tC.toDataURL('image/jpeg', 0.8); const fI = new Image(); fI.src = cSrc;
+                fI.onload = () => { const vW = w > 300 ? 300 : w; const vH = (h/w)*vW; const cX = (-camera.x + canvas.width/2)/camera.z - vW/2; const cY = (-camera.y + canvas.height/2)/camera.z - vH/2; const o = { id: Math.random(), type:'image', x: cX, y: cY, w: vW, h: vH, src: cSrc, grosor: 1 }; o.imgObj = fI; elementos.push(o); socket.emit('dibujar', o); guardarEstado(); pedirRender(); };
+            };
+        }; r.readAsDataURL(file);
+    }; iF.click();
+}
 
 canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
 canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); }, {passive:false});
 canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
-
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; pedirRender(); });
 guardarEstado(); requestAnimationFrame(ejecutarRender);
