@@ -6,8 +6,16 @@
     <title>Mis Pizarras | Cuaderno Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
     <style>
-        body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 40px 20px; color: #333; }
-        .container { max-width: 1000px; margin: 0 auto; }
+        body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; display: flex; height: 100vh; overflow: hidden; }
+        
+        /* NUEVO: Barra lateral para carpetas */
+        .sidebar { width: 250px; background: white; border-right: 1px solid #eaeaea; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        .sidebar h2 { font-size: 16px; color: #888; text-transform: uppercase; margin-bottom: 15px; display: flex; align-items: center; gap: 5px; }
+        .folder-item { padding: 10px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-bottom: 5px; transition: 0.2s; font-weight: 500; color: #555; }
+        .folder-item:hover { background: #f0f0f0; }
+        .folder-item.active { background: #e3f2fd; color: #2196F3; }
+        
+        .main-content { flex: 1; padding: 40px; overflow-y: auto; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; flex-wrap: wrap; gap: 20px;}
         h1 { margin: 0; font-size: 28px; color: #111; display: flex; align-items: center; gap: 10px;}
         
@@ -16,7 +24,7 @@
         .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;}
         
         .join-box { display: flex; background: white; border-radius: 30px; overflow: hidden; border: 1px solid #ccc; }
-        .join-box input { border: none; padding: 10px 15px; outline: none; font-size: 14px; width: 140px; }
+        .join-box input { border: none; padding: 10px 15px; outline: none; font-size: 14px; width: 120px; }
         .join-box button { background: #2196F3; color: white; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s; }
         .join-box button:hover { background: #1976D2; }
 
@@ -25,26 +33,43 @@
         .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
         .card-icon { margin-bottom: 15px; background: #e3f2fd; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
         .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 60px; }
+        .card-folder { font-size: 12px; color: #2196F3; font-weight: bold; text-transform: uppercase; margin-bottom: 5px;}
         .card-date { font-size: 13px; color: #888; margin: 0; }
-        .card-actions { position: absolute; top: 15px; right: 15px; display: flex; gap: 5px; }
+        
+        /* Menú de opciones de la tarjeta */
+        .card-actions { position: absolute; top: 15px; right: 15px; display: flex; flex-direction: column; gap: 5px; }
         .btn-action { background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #555; }
         .btn-action:hover { background: #ddd; transform: scale(1.1); }
         .btn-delete:hover { background: #ffebee; color: #f44336; }
+        
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
+
+        @media (max-width: 768px) {
+            body { flex-direction: column; overflow: auto; }
+            .sidebar { width: auto; border-right: none; border-bottom: 1px solid #eaeaea; padding: 10px; flex-direction: row; overflow-x: auto; white-space: nowrap; }
+            .folder-item { margin-bottom: 0; margin-right: 10px; }
+        }
     </style>
 </head>
 <body>
-    <div class="container">
+
+    <div class="sidebar">
+        <div style="font-size: 30px; margin-bottom: 30px; font-weight: bold; color:#111;">🎨 Cuaderno</div>
+        <h2><span class="material-symbols-outlined">folder</span> Carpetas</h2>
+        <div id="folder-list">
+            </div>
+    </div>
+
+    <div class="main-content">
         <div class="header">
             <h1><span class="material-symbols-outlined" style="font-size: 32px; color: #4caf50;">waving_hand</span> Hola, <span id="nombre-usuario"></span></h1>
             <div class="header-actions">
                 <div class="join-box">
-                    <input type="text" id="input-codigo" placeholder="Código de sala">
+                    <input type="text" id="input-codigo" placeholder="Código">
                     <button onclick="unirsePorCodigo()">Unirse</button>
                 </div>
-
-                <button class="btn-nuevo" onclick="crearNuevoProyecto()"><span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nuevo Proyecto</button>
-                <button class="btn-logout" onclick="cerrarSesion()"><span class="material-symbols-outlined" style="font-size: 18px;">logout</span> Salir</button>
+                <button class="btn-nuevo" onclick="crearNuevoProyecto()"><span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nuevo</button>
+                <button class="btn-logout" onclick="cerrarSesion()"><span class="material-symbols-outlined" style="font-size: 18px;">logout</span></button>
             </div>
         </div>
         <div class="grid" id="project-grid"><p style="text-align: center; color: #888;">Cargando...</p></div>
@@ -55,6 +80,9 @@
         if (!token) window.location.href = 'login.html';
         document.getElementById('nombre-usuario').innerText = localStorage.getItem('nombre_usuario');
 
+        let todosLosProyectos = [];
+        let carpetaActual = 'Todas';
+
         function cerrarSesion() {
             localStorage.removeItem('token_cuaderno');
             localStorage.removeItem('nombre_usuario');
@@ -62,63 +90,92 @@
         }
 
         function crearNuevoProyecto() { window.location.href = `pizarra.html?sala=${Math.random().toString(36).substr(2, 6)}`; }
-
-        function unirsePorCodigo() {
-            const codigo = document.getElementById('input-codigo').value.trim();
-            if(codigo) { window.location.href = `pizarra.html?sala=${codigo}`; }
-        }
+        function unirsePorCodigo() { const cod = document.getElementById('input-codigo').value.trim(); if(cod) window.location.href = `pizarra.html?sala=${cod}`; }
 
         async function renombrarProyecto(event, idSala, nombreActual) {
             event.preventDefault(); event.stopPropagation(); 
             const nuevoNombre = prompt("Nuevo nombre:", nombreActual);
             if (nuevoNombre && nuevoNombre.trim() !== "") {
-                try {
-                    await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ nombre: nuevoNombre.trim() }) });
-                    cargarProyectos();
-                } catch (error) { alert("Error al renombrar."); }
+                await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ nombre: nuevoNombre.trim() }) });
+                cargarProyectos();
+            }
+        }
+
+        async function moverCarpeta(event, idSala, carpetaActual) {
+            event.preventDefault(); event.stopPropagation(); 
+            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Álgebra, Arch Linux, General):", carpetaActual || 'Principal');
+            if (nuevaCarpeta && nuevaCarpeta.trim() !== "") {
+                await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ carpeta: nuevaCarpeta.trim() }) });
+                cargarProyectos();
             }
         }
 
         async function borrarProyecto(event, idSala, nombreActual) {
             event.preventDefault(); event.stopPropagation(); 
             if (confirm(`⚠️ ¿Borrar "${nombreActual}" para siempre?`)) {
-                try {
-                    await fetch(`/api/proyectos/${idSala}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
-                    cargarProyectos();
-                } catch (error) { alert("Error al borrar."); }
+                await fetch(`/api/proyectos/${idSala}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }});
+                cargarProyectos();
             }
         }
 
-        async function cargarProyectos() {
+        function renderizarCarpetas() {
+            // Extraer carpetas únicas
+            const carpetasSet = new Set(todosLosProyectos.map(p => p.carpeta || 'Principal'));
+            const carpetas = ['Todas', ...Array.from(carpetasSet).sort()];
+            
+            const list = document.getElementById('folder-list');
+            list.innerHTML = '';
+            
+            carpetas.forEach(c => {
+                const div = document.createElement('div');
+                div.className = `folder-item ${c === carpetaActual ? 'active' : ''}`;
+                div.innerHTML = `<span class="material-symbols-outlined" style="font-size:20px;">${c==='Todas'?'dashboard':'folder'}</span> ${c}`;
+                div.onclick = () => { carpetaActual = c; renderizarCarpetas(); renderizarProyectos(); };
+                list.appendChild(div);
+            });
+        }
+
+        function renderizarProyectos() {
             const grid = document.getElementById('project-grid');
+            grid.innerHTML = '';
+
+            const filtrados = carpetaActual === 'Todas' ? todosLosProyectos : todosLosProyectos.filter(p => (p.carpeta || 'Principal') === carpetaActual);
+
+            if (filtrados.length === 0) return grid.innerHTML = `<div class="empty-state">No hay proyectos aquí.</div>`;
+
+            filtrados.forEach(proj => {
+                const fechaObj = new Date(proj.fecha);
+                const fechaStr = fechaObj.toLocaleDateString();
+                const nombreMostrar = proj.nombre && proj.nombre !== 'Pizarra Sin Nombre' ? proj.nombre : `Sala: ${proj._id}`;
+                const carpeta = proj.carpeta || 'Principal';
+                const nombreSeguro = nombreMostrar.replace(/'/g, "\\'");
+
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.onclick = () => { window.location.href = `pizarra.html?sala=${proj._id}`; };
+                card.innerHTML = `
+                    <div class="card-folder">${carpeta}</div>
+                    <div class="card-icon"><span class="material-symbols-outlined" style="font-size: 32px; color: #2196F3;">draw</span></div>
+                    <h3 class="card-title">${nombreMostrar}</h3>
+                    <p class="card-date">Modificado: ${fechaStr}</p>
+                    <div class="card-actions">
+                        <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Editar Nombre"><span class="material-symbols-outlined" style="font-size: 18px;">edit</span></button>
+                        <button class="btn-action" onclick="moverCarpeta(event, '${proj._id}', '${carpeta}')" title="Mover a Carpeta"><span class="material-symbols-outlined" style="font-size: 18px;">drive_file_move</span></button>
+                        <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Borrar"><span class="material-symbols-outlined" style="font-size: 18px;">delete</span></button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+
+        async function cargarProyectos() {
             try {
                 const respuesta = await fetch('/api/proyectos', { headers: { 'Authorization': `Bearer ${token}` } });
                 if (respuesta.status === 401) return cerrarSesion(); 
-                const proyectos = await respuesta.json();
-                grid.innerHTML = '';
-                if (proyectos.length === 0) return grid.innerHTML = `<div class="empty-state">No tienes proyectos. ¡Crea uno o únete a una sala!</div>`;
-
-                proyectos.forEach(proj => {
-                    const fechaObj = new Date(proj.fecha);
-                    const fechaStr = fechaObj.toLocaleDateString() + ' a las ' + fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-                    const nombreMostrar = proj.nombre && proj.nombre !== 'Pizarra Sin Nombre' ? proj.nombre : `Sala: ${proj._id}`;
-                    const nombreSeguro = nombreMostrar.replace(/'/g, "\\'");
-
-                    const card = document.createElement('div');
-                    card.className = 'card';
-                    card.onclick = () => { window.location.href = `pizarra.html?sala=${proj._id}`; };
-                    card.innerHTML = `
-                        <div class="card-icon"><span class="material-symbols-outlined" style="font-size: 32px; color: #2196F3;">draw</span></div>
-                        <h3 class="card-title">${nombreMostrar}</h3>
-                        <p class="card-date">Última edición: ${fechaStr}</p>
-                        <div class="card-actions">
-                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Editar Nombre"><span class="material-symbols-outlined" style="font-size: 18px;">edit</span></button>
-                            <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Borrar Pizarra"><span class="material-symbols-outlined" style="font-size: 18px;">delete</span></button>
-                        </div>
-                    `;
-                    grid.appendChild(card);
-                });
-            } catch (error) { grid.innerHTML = `<p style="color:red;">Error de conexión.</p>`; }
+                todosLosProyectos = await respuesta.json();
+                renderizarCarpetas();
+                renderizarProyectos();
+            } catch (error) { document.getElementById('project-grid').innerHTML = `<p style="color:red;">Error de conexión.</p>`; }
         }
         cargarProyectos();
     </script>
