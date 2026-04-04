@@ -5,46 +5,36 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mis Pizarras | Cuaderno Pro</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f4f7f6; margin: 0; padding: 40px 20px; color: #333;
-        }
+        body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 40px 20px; color: #333; }
         .container { max-width: 1000px; margin: 0 auto; }
-        
-        .header {
-            display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;
-        }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
         h1 { margin: 0; font-size: 28px; color: #111; }
         
-        .btn-nuevo {
-            background: #4caf50; color: white; border: none; padding: 12px 24px;
-            border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer;
-            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); transition: all 0.2s;
-        }
+        .btn-nuevo { background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); transition: all 0.2s; }
         .btn-nuevo:hover { background: #43a047; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4); }
 
-        .grid {
-            display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 25px;
-        }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 25px; }
 
         .card {
-            background: white; border-radius: 16px; padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05); text-decoration: none; color: inherit;
-            display: flex; flex-direction: column; transition: all 0.2s; border: 1px solid #eaeaea;
+            background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: all 0.2s; 
+            border: 1px solid #eaeaea; position: relative;
         }
         .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
         
-        .card-icon {
-            font-size: 40px; margin-bottom: 15px; background: #e3f2fd; 
-            width: 70px; height: 70px; display: flex; align-items: center; justify-content: center;
-            border-radius: 12px;
-        }
-        .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; }
+        .card-icon { font-size: 40px; margin-bottom: 15px; background: #e3f2fd; width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+        .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 30px; }
         .card-date { font-size: 13px; color: #888; margin: 0; }
 
-        .empty-state {
-            text-align: center; padding: 50px; color: #888; grid-column: 1 / -1;
+        /* NUEVO BOTÓN DE EDITAR */
+        .btn-edit {
+            position: absolute; top: 20px; right: 20px; background: #f0f0f0; border: none;
+            border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-size: 16px;
+            display: flex; align-items: center; justify-content: center; transition: 0.2s;
         }
+        .btn-edit:hover { background: #ddd; transform: scale(1.1); }
+
+        .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
     </style>
 </head>
 <body>
@@ -61,55 +51,75 @@
     </div>
 
     <script>
-        // Función para el botón "+ Nuevo Proyecto"
         function crearNuevoProyecto() {
-            // Genera un código de 6 letras/números al azar
             const nuevoId = Math.random().toString(36).substr(2, 6);
-            // Nos lleva al lienzo (pizarra.html) con esa nueva sala
             window.location.href = `pizarra.html?sala=${nuevoId}`;
         }
 
-        // Función para cargar los proyectos desde la Base de Datos
+        // NUEVA FUNCIÓN: Para cambiar el nombre
+        async function renombrarProyecto(event, idSala, nombreActual) {
+            // Esto evita que al hacer clic en el botón de editar, el navegador entre a la sala
+            event.preventDefault(); 
+            event.stopPropagation(); 
+
+            // Le pedimos al usuario el nuevo nombre
+            const nuevoNombre = prompt("Escribe el nuevo nombre para este proyecto:", nombreActual);
+            
+            // Si el usuario escribió algo y no canceló
+            if (nuevoNombre && nuevoNombre.trim() !== "") {
+                try {
+                    // Enviamos la petición a la nueva puerta del servidor
+                    await fetch(`/api/proyectos/${idSala}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ nombre: nuevoNombre.trim() })
+                    });
+                    
+                    // Recargamos la lista para ver el nuevo nombre
+                    cargarProyectos();
+                } catch (error) {
+                    alert("Hubo un error al guardar el nombre.");
+                }
+            }
+        }
+
         async function cargarProyectos() {
             const grid = document.getElementById('project-grid');
-            
             try {
-                // Le pedimos a tu servidor (server.js) la lista de la base de datos
                 const respuesta = await fetch('/api/proyectos');
                 const proyectos = await respuesta.json();
-
-                grid.innerHTML = ''; // Limpiamos el texto de "Cargando..."
+                grid.innerHTML = '';
 
                 if (proyectos.length === 0) {
                     grid.innerHTML = `<div class="empty-state">No tienes ningún proyecto todavía. ¡Crea uno nuevo!</div>`;
                     return;
                 }
 
-                // Por cada proyecto que exista, creamos una "Tarjeta"
                 proyectos.forEach(proj => {
-                    // Convertimos la fecha de la base de datos a una fecha normal y legible
                     const fechaObj = new Date(proj.fecha);
                     const fechaStr = fechaObj.toLocaleDateString() + ' a las ' + fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    // Si tiene nombre usamos el nombre, si no, usamos la frase "Sala: [ID]"
+                    const nombreMostrar = proj.nombre && proj.nombre !== 'Pizarra Sin Nombre' ? proj.nombre : `Sala: ${proj._id}`;
 
                     const card = document.createElement('a');
                     card.className = 'card';
-                    card.href = `pizarra.html?sala=${proj._id}`; // El enlace a esa sala específica
+                    card.href = `pizarra.html?sala=${proj._id}`;
                     
                     card.innerHTML = `
                         <div class="card-icon">🎨</div>
-                        <h3 class="card-title">Sala: ${proj._id}</h3>
+                        <h3 class="card-title">${nombreMostrar}</h3>
                         <p class="card-date">Última edición: ${fechaStr}</p>
+                        <button class="btn-edit" onclick="renombrarProyecto(event, '${proj._id}', '${nombreMostrar}')" title="Renombrar">✏️</button>
                     `;
                     grid.appendChild(card);
                 });
 
             } catch (error) {
-                console.error("Error cargando los proyectos:", error);
                 grid.innerHTML = `<p style="color:red; grid-column: 1/-1;">Hubo un error al conectar con la base de datos.</p>`;
             }
         }
 
-        // Ejecutamos la carga apenas se abre la página
         cargarProyectos();
     </script>
 </body>
