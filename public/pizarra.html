@@ -5,9 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="color-scheme" content="light only">
     <title>Pizarra | Cuaderno Pro</title>
-    
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
-    
     <link rel="stylesheet" href="style.css">
     <style>
         #pantalla-espera { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #f4f7f6; z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
@@ -22,9 +20,19 @@
         .btn-rechazar { background: #f44336; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
         @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 
-        /* Ajuste para que los iconos queden centrados en tus botones */
         #toolbar button { display: flex; align-items: center; justify-content: center; font-size: 20px;}
         .material-symbols-outlined { font-size: 24px; }
+
+        /* NUEVO: Contenedor del Minimapa */
+        #minimap-container {
+            position: fixed; bottom: 20px; right: 20px; width: 200px; height: 150px;
+            background: rgba(255, 255, 255, 0.9); border: 2px solid #ccc; border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000; overflow: hidden;
+            display: none; /* Oculto por defecto, se activa desde la barra */
+            cursor: crosshair;
+        }
+        #minimap { width: 100%; height: 100%; }
+        #minimap-label { position: absolute; top: 5px; left: 5px; font-size: 10px; color: #666; font-weight: bold; background: rgba(255,255,255,0.7); padding: 2px 5px; border-radius: 3px;}
     </style>
 </head>
 <body>
@@ -58,14 +66,14 @@
             <button id="btn-undo" title="Deshacer (Ctrl+Z)"><span class="material-symbols-outlined">undo</span></button>
             <button id="btn-redo" title="Rehacer (Ctrl+Y)"><span class="material-symbols-outlined">redo</span></button>
             <button id="btn-pan" title="Mover Lienzo"><span class="material-symbols-outlined">pan_tool</span></button>
+            
+            <button id="btn-minimap" title="Ver Minimapa"><span class="material-symbols-outlined">map</span></button>
             <div class="sep"></div>
             
             <button id="btn-pen" title="Lápiz"><span class="material-symbols-outlined">draw</span></button>
             <button id="btn-laser" title="Láser"><span class="material-symbols-outlined">flare</span></button> 
             <button id="btn-sticky" title="Nota Adhesiva"><span class="material-symbols-outlined">sticky_note_2</span></button>
-            
             <button id="btn-line" title="Línea"><span class="material-symbols-outlined">horizontal_rule</span></button>
-            
             <button id="btn-rect" title="Cuadrado"><span class="material-symbols-outlined">rectangle</span></button>
             <button id="btn-ellipse" title="Círculo"><span class="material-symbols-outlined">circle</span></button>
             <button id="btn-text" title="Texto"><span class="material-symbols-outlined">text_fields</span></button>
@@ -85,6 +93,11 @@
             <button id="btn-clear" style="color:#f44336" title="Borrar Todo"><span class="material-symbols-outlined">delete_forever</span></button>
         </div>
     </nav>
+
+    <div id="minimap-container">
+        <div id="minimap-label">MINIMAPA</div>
+        <canvas id="minimap"></canvas>
+    </div>
 
     <input type="file" id="image-upload-input" accept="image/*" style="display: none;">
     <canvas id="pizarra"></canvas>
