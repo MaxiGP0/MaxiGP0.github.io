@@ -11,7 +11,7 @@ const io = new Server(server, {
 app.use(express.static('public'));
 
 let historialDibujos = [];
-const PASSWORD_SALA = "12345";
+const PASSWORD_SALA = "maxigp01";
 
 io.use((socket, next) => {
     const password = socket.handshake.auth.password;
