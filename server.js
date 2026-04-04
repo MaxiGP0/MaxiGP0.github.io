@@ -29,6 +29,7 @@ const Usuario = mongoose.model('Usuario', UsuarioSchema);
 const ProyectoSchema = new mongoose.Schema({
     _id: String,             
     nombre: { type: String, default: 'Pizarra Sin Nombre' }, 
+    carpeta: { type: String, default: 'Principal' }, // NUEVO: Sistema de carpetas
     elementos: { type: Array, default: [] }, 
     propietarioId: { type: String }, 
     fecha: { type: Date, default: Date.now }
@@ -72,7 +73,7 @@ const verificarToken = (req, res, next) => {
 
 app.get('/api/proyectos', verificarToken, async (req, res) => {
     try {
-        const proyectos = await Proyecto.find({ propietarioId: req.usuario.id }, '_id nombre fecha').sort({ fecha: -1 });
+        const proyectos = await Proyecto.find({ propietarioId: req.usuario.id }, '_id nombre carpeta fecha').sort({ fecha: -1 });
         res.json(proyectos);
     } catch (error) { res.status(500).json({ error: 'Error al cargar' }); }
 });
@@ -81,9 +82,15 @@ app.put('/api/proyectos/:id', verificarToken, async (req, res) => {
     try {
         const p = await Proyecto.findById(req.params.id);
         if (p.propietarioId !== req.usuario.id) return res.status(403).json({ error: 'No eres el dueño' });
-        await Proyecto.findByIdAndUpdate(req.params.id, { nombre: req.body.nombre });
+        
+        // Permite actualizar nombre y carpeta
+        const updates = {};
+        if (req.body.nombre) updates.nombre = req.body.nombre;
+        if (req.body.carpeta) updates.carpeta = req.body.carpeta;
+
+        await Proyecto.findByIdAndUpdate(req.params.id, updates);
         res.json({ success: true });
-    } catch (error) { res.status(500).json({ error: 'Error al renombrar' }); }
+    } catch (error) { res.status(500).json({ error: 'Error al editar' }); }
 });
 
 app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
@@ -95,7 +102,6 @@ app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error al borrar' }); }
 });
 
-// --- LÓGICA DE MULTIJUGADOR ESTILO ZOOM ---
 io.use((socket, next) => {
     const { token, salaId } = socket.handshake.auth;
     if (!token || !salaId) return next(new Error("Sin Pase VIP"));
@@ -111,47 +117,30 @@ io.on('connection', async (socket) => {
     const sala = socket.salaId;
     let proyecto = await Proyecto.findById(sala);
     
-    // Si la sala no existe, el que la crea es el dueño
-    if (!proyecto) { 
-        proyecto = await Proyecto.create({ _id: sala, elementos: [], propietarioId: socket.usuario.id }); 
-    }
+    if (!proyecto) { proyecto = await Proyecto.create({ _id: sala, elementos: [], propietarioId: socket.usuario.id, carpeta: 'Principal' }); }
 
     const esElDueño = proyecto.propietarioId === socket.usuario.id;
 
     if (esElDueño) {
-        // Si es el dueño, entra directo
         socket.join(sala);
-        console.log(`👑 Dueño ${socket.usuario.nombre} entró a la sala: ${sala}`);
         socket.emit('acceso_permitido', proyecto.elementos);
     } else {
-        // Si es invitado, entra a un "Limbo" personal y manda notificación
         socket.join(socket.id); 
-        console.log(`⏳ Invitado ${socket.usuario.nombre} tocando la puerta en: ${sala}`);
         socket.emit('esperando_aprobacion');
-        
-        // Le avisa a los que están en la sala (al dueño) que alguien quiere entrar
-        socket.to(sala).emit('alguien_quiere_entrar', { 
-            guestId: socket.id, 
-            nombre: socket.usuario.nombre 
-        });
+        socket.to(sala).emit('alguien_quiere_entrar', { guestId: socket.id, nombre: socket.usuario.nombre });
     }
 
-    // El dueño responde a la solicitud
     socket.on('responder_acceso', async ({ guestId, aprobado }) => {
-        // Verificamos por seguridad que el que responde sea realmente el dueño
         const p = await Proyecto.findById(sala);
         if (p.propietarioId !== socket.usuario.id) return; 
-
         const guestSocket = io.sockets.sockets.get(guestId);
         if (!guestSocket) return;
 
         if (aprobado) {
             guestSocket.join(sala);
             guestSocket.emit('acceso_permitido', p.elementos);
-            console.log(`✅ ${guestSocket.usuario.nombre} fue aceptado en: ${sala}`);
         } else {
             guestSocket.emit('acceso_denegado');
-            console.log(`❌ ${guestSocket.usuario.nombre} fue rechazado en: ${sala}`);
         }
     });
 
