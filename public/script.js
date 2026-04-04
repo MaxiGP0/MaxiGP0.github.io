@@ -1,19 +1,17 @@
 // --- NUEVO: SISTEMA DE RUTAS Y SALAS ---
-// Leemos la URL para ver si el usuario escribió "?sala=algo"
 const urlParams = new URLSearchParams(window.location.search);
 let miSala = urlParams.get('sala');
 
-// Si entró a la página principal sin sala, le creamos un código aleatorio y lo redirigimos
+// Si entró sin sala, le inventamos una y lo redirigimos
 if (!miSala) {
-    miSala = Math.random().toString(36).substr(2, 6); // ej: "x8a9pq"
+    miSala = Math.random().toString(36).substr(2, 6);
     window.location.href = `?sala=${miSala}`;
 }
 
-// Ahora la alerta le avisa en qué sala está entrando
 const pass = prompt(`🚪 Entrando a la sala: [ ${miSala} ]\n🔐 Contraseña:`);
 const miNombre = prompt("👤 Tu nombre:") || "Anónimo";
 
-// Le enviamos al servidor la contraseña y el nombre de la sala que queremos
+// Conectamos enviando la contraseña y la sala
 const socket = io({ auth: { password: pass, salaId: miSala } });
 
 socket.on('connect_error', (err) => { alert("❌ " + err.message); window.location.reload(); });
