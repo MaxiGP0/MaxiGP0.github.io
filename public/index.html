@@ -18,7 +18,7 @@
         .card {
             background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: all 0.2s; 
-            border: 1px solid #eaeaea; position: relative;
+            border: 1px solid #eaeaea; position: relative; cursor: pointer;
         }
         .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
         
@@ -60,18 +60,18 @@
         async function renombrarProyecto(event, idSala, nombreActual) {
             event.preventDefault(); 
             event.stopPropagation(); 
+            
             const nuevoNombre = prompt("Escribe el nuevo nombre para este proyecto:", nombreActual);
             
             if (nuevoNombre && nuevoNombre.trim() !== "") {
-                // NUEVO: Pedimos la contraseña antes de enviar
                 const pass = prompt("🔐 Ingresa la contraseña maestra para confirmar:");
-                if (!pass) return; // Si cancela, no hacemos nada
+                if (!pass) return; 
 
                 try {
                     const respuesta = await fetch(`/api/proyectos/${idSala}`, {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nombre: nuevoNombre.trim(), password: pass }) // Enviamos la clave
+                        body: JSON.stringify({ nombre: nuevoNombre.trim(), password: pass.trim() }) 
                     });
                     
                     if (!respuesta.ok) throw new Error("Contraseña incorrecta");
@@ -87,15 +87,14 @@
             const seguro = confirm(`⚠️ ¿Estás completamente seguro de que quieres borrar "${nombreActual}"?\n\nEsta acción no se puede deshacer.`);
             
             if (seguro) {
-                // NUEVO: Pedimos la contraseña para borrar
                 const pass = prompt("🔐 Ingresa la contraseña maestra para eliminar definitivamente:");
-                if (!pass) return; // Si cancela, no hacemos nada
+                if (!pass) return; 
 
                 try {
                     const respuesta = await fetch(`/api/proyectos/${idSala}`, { 
                         method: 'DELETE',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: pass }) // Enviamos la clave
+                        body: JSON.stringify({ password: pass.trim() }) 
                     });
 
                     if (!respuesta.ok) throw new Error("Contraseña incorrecta");
@@ -121,18 +120,22 @@
                     const fechaStr = fechaObj.toLocaleDateString() + ' a las ' + fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const nombreMostrar = proj.nombre && proj.nombre !== 'Pizarra Sin Nombre' ? proj.nombre : `Sala: ${proj._id}`;
 
-                    const card = document.createElement('a');
+                    // FIX: Tarjeta como Div en lugar de Enlace
+                    const card = document.createElement('div');
                     card.className = 'card';
-                    card.href = `pizarra.html?sala=${proj._id}`;
+                    card.onclick = () => { window.location.href = `pizarra.html?sala=${proj._id}`; };
                     
+                    // Sanitizar nombre para evitar errores con comillas simples
+                    const nombreSeguro = nombreMostrar.replace(/'/g, "\\'");
+
                     card.innerHTML = `
                         <div class="card-icon">🎨</div>
                         <h3 class="card-title">${nombreMostrar}</h3>
                         <p class="card-date">Última edición: ${fechaStr}</p>
                         
                         <div class="card-actions">
-                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreMostrar}')" title="Renombrar">✏️</button>
-                            <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreMostrar}')" title="Borrar">🗑️</button>
+                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Renombrar">✏️</button>
+                            <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Borrar">🗑️</button>
                         </div>
                     `;
                     grid.appendChild(card);
