@@ -34,10 +34,13 @@ const canvas = document.getElementById('pizarra');
 const ctx = canvas.getContext('2d', { willReadFrequently: true });
 canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
-// --- NUEVO: Setup del Minimapa ---
 const miniCanvas = document.getElementById('minimap');
 const mCtx = miniCanvas.getContext('2d');
 let verMinimapa = false;
+
+// --- NUEVO: CONFIGURACIÓN DE PDF.JS ---
+const pdfjsLib = window['pdfjs-dist/build/pdf'];
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
@@ -119,6 +122,8 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             return;
         }
         if(id === 'btn-image') { subirImagen(); return; }
+        if(id === 'btn-pdf') { subirPDF(); return; } // Llamamos a la función del PDF
+        
         document.querySelectorAll('#toolbar button:not(#btn-minimap)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active'); modo = id.replace('btn-', ''); seleccionados = []; pedirRender();
     };
@@ -148,7 +153,6 @@ const start = e => {
     if(m === 'erase') { borrarEn(p); return; }
 
     if(m === 'select') {
-        // Mejoramos la detección de hit para selección múltiple
         let hit = null;
         for (let i = elementos.length - 1; i >= 0; i--) {
             const el = elementos[i];
@@ -162,19 +166,12 @@ const start = e => {
         if (dif < 300 && hit && (hit.type === 'text' || hit.type === 'sticky')) { mostrarEditorTexto(hit.text, (nuevo) => { hit.text = nuevo; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }); return; }
 
         if(hit) {
-            // Si hacemos clic en algo que no está seleccionado, se vuelve la única selección.
-            // Si ya estaba en la selección múltiple, lo dejamos para mover el grupo.
             if (!seleccionados.includes(hit)) seleccionados = [hit];
             lastMousePos = { x: p.x, y: p.y };
-            
-            // Lógica de redimensionado solo si hay 1 objeto (no podemos redimensionar múltiples a la vez fácil)
             if(seleccionados.length === 1 && hit.type !== 'pen' && hit.type !== 'sticky') {
                 handleSeleccionado = [{x:hit.x,y:hit.y,n:'tl'},{x:hit.x+hit.w,y:hit.y,n:'tr'},{x:hit.x,y:hit.y+hit.h,n:'bl'},{x:hit.x+hit.w,y:hit.y+hit.h,n:'br'}].find(h => Math.hypot(p.x - h.x, p.y - h.y) < 30/camera.z);
             }
-        } else { 
-            seleccionados = []; 
-            boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 }; 
-        }
+        } else { seleccionados = []; boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 }; }
         pedirRender(); return;
     }
 
@@ -212,12 +209,8 @@ const move = e => {
             if(h.includes('b')) el.h = p.y - el.y; if(h.includes('t')) { el.h += el.y - p.y; el.y = p.y; }
             cambioRealizado = true;
         } else if (seleccionados.length > 0 && (e.buttons === 1 || e.touches)) {
-            // Mover MÚLTIPLES elementos a la vez
             const dx = p.x - lastMousePos.x; const dy = p.y - lastMousePos.y;
-            seleccionados.forEach(el => { 
-                if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } 
-                else { el.x += dx; el.y += dy; } 
-            });
+            seleccionados.forEach(el => { if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } else { el.x += dx; el.y += dy; } });
             lastMousePos = { x: p.x, y: p.y }; cambioRealizado = true;
         }
         pedirRender();
@@ -227,7 +220,6 @@ const move = e => {
 const end = e => {
     isPenEraser = false; 
     if (boxSeleccion) {
-        // Al soltar el mouse, atrapamos todo lo que esté dentro de la caja azul
         seleccionados = elementos.filter(el => {
             let eX, eW, eY, eH;
             if(el.type === 'pen'){ const xs = el.points.map(pt=>pt.x); eX = Math.min(...xs); eW = Math.max(...xs)-eX; const ys = el.points.map(pt=>pt.y); eY = Math.min(...ys); eH = Math.max(...ys)-eY; }
@@ -277,12 +269,9 @@ function helperDibujarElemento(c, el, z) {
     else if(el.type==='sticky') { c.shadowColor = 'rgba(0,0,0,0.1)'; c.shadowBlur = 10; c.fillRect(el.x, el.y, el.w, el.h); c.shadowColor = 'transparent'; c.fillStyle = "#222"; c.font = "bold 18px Arial"; c.textBaseline = "top"; const pars = el.text.split('\n'); let tY = el.y + 15; pars.forEach(parr => { const wds = parr.split(' '); let l = ''; for(let n = 0; n < wds.length; n++) { const test = l + wds[n] + ' '; if (c.measureText(test).width > el.w - 30 && n > 0) { c.fillText(l, el.x + 15, tY); l = wds[n] + ' '; tY += 24; } else { l = test; } } c.fillText(l, el.x + 15, tY); tY += 24; }); if (tY + 15 > el.y + el.h) el.h = (tY - el.y) + 15; }
 }
 
-// --- NUEVO: Motor del Minimapa ---
 function dibujarMinimapa() {
     if (!verMinimapa) return;
-    miniCanvas.width = document.getElementById('minimap-container').clientWidth;
-    miniCanvas.height = document.getElementById('minimap-container').clientHeight;
-    
+    miniCanvas.width = document.getElementById('minimap-container').clientWidth; miniCanvas.height = document.getElementById('minimap-container').clientHeight;
     mCtx.fillStyle = "#f0f0f0"; mCtx.fillRect(0, 0, miniCanvas.width, miniCanvas.height);
     if (elementos.length === 0) return;
 
@@ -292,40 +281,24 @@ function dibujarMinimapa() {
         else { const x = el.w < 0 ? el.x + el.w : el.x; const y = el.h < 0 ? el.y + el.h : el.y; minX = Math.min(minX, x); maxX = Math.max(maxX, x + Math.abs(el.w)); minY = Math.min(minY, y); maxY = Math.max(maxY, y + Math.abs(el.h)); }
     });
     
-    // Agregamos margen al mapa global
     const padding = 500; minX -= padding; minY -= padding; maxX += padding; maxY += padding;
     const mapW = maxX - minX; const mapH = maxY - minY;
     
-    // Calculamos escala para que quepa en la ventanita
     const scale = Math.min(miniCanvas.width / mapW, miniCanvas.height / mapH);
     const offsetX = (miniCanvas.width - mapW * scale) / 2; const offsetY = (miniCanvas.height - mapH * scale) / 2;
 
-    mCtx.save();
-    mCtx.translate(offsetX, offsetY);
-    mCtx.scale(scale, scale);
-    mCtx.translate(-minX, -minY);
-
-    // Dibujamos miniaturas de todo
+    mCtx.save(); mCtx.translate(offsetX, offsetY); mCtx.scale(scale, scale); mCtx.translate(-minX, -minY);
     elementos.forEach(el => helperDibujarElemento(mCtx, el, 1));
 
-    // Dibujamos el RECTÁNGULO ROJO de nuestra vista actual
     const viewW = canvas.width / camera.z; const viewH = canvas.height / camera.z;
     const viewX = -camera.x / camera.z; const viewY = -camera.y / camera.z;
     
-    mCtx.strokeStyle = "rgba(255, 0, 0, 0.8)";
-    mCtx.lineWidth = 2 / scale;
-    mCtx.fillStyle = "rgba(255, 0, 0, 0.1)";
-    mCtx.fillRect(viewX, viewY, viewW, viewH);
-    mCtx.strokeRect(viewX, viewY, viewW, viewH);
-    mCtx.restore();
+    mCtx.strokeStyle = "rgba(255, 0, 0, 0.8)"; mCtx.lineWidth = 2 / scale; mCtx.fillStyle = "rgba(255, 0, 0, 0.1)"; mCtx.fillRect(viewX, viewY, viewW, viewH); mCtx.strokeRect(viewX, viewY, viewW, viewH); mCtx.restore();
 
-    // Permitir clic en el minimapa para saltar (Navegación)
     miniCanvas.onclick = (e) => {
-        const rect = miniCanvas.getBoundingClientRect();
-        const clickX = e.clientX - rect.left; const clickY = e.clientY - rect.top;
+        const rect = miniCanvas.getBoundingClientRect(); const clickX = e.clientX - rect.left; const clickY = e.clientY - rect.top;
         const worldX = minX + (clickX - offsetX) / scale; const worldY = minY + (clickY - offsetY) / scale;
-        camera.x = (canvas.width / 2) - (worldX * camera.z); camera.y = (canvas.height / 2) - (worldY * camera.z);
-        pedirRender();
+        camera.x = (canvas.width / 2) - (worldX * camera.z); camera.y = (canvas.height / 2) - (worldY * camera.z); pedirRender();
     };
 }
 
@@ -338,10 +311,8 @@ function ejecutarRender() {
     for(let y = sY; y < (canvas.height-camera.y)/camera.z + stp; y += stp) { ctx.moveTo((-camera.x/camera.z), y); ctx.lineTo((canvas.width-camera.x)/camera.z, y); }
     ctx.stroke();
 
-    // Dibujamos Elementos
     [...elementos, elementoActual].forEach(el => { if(!el) return; helperDibujarElemento(ctx, el, camera.z); });
 
-    // DIBUJAMOS LA SELECCIÓN MÚLTIPLE GLOBAL
     if(modo === 'select' && seleccionados.length > 0) {
         let sMinX = Infinity, sMinY = Infinity, sMaxX = -Infinity, sMaxY = -Infinity;
         seleccionados.forEach(el => {
@@ -349,19 +320,13 @@ function ejecutarRender() {
             else { const x = el.w < 0 ? el.x + el.w : el.x; const y = el.h < 0 ? el.y + el.h : el.y; sMinX = Math.min(sMinX, x); sMaxX = Math.max(sMaxX, x + Math.abs(el.w)); sMinY = Math.min(sMinY, y); sMaxY = Math.max(sMaxY, y + Math.abs(el.h)); }
         });
         ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z;
-        ctx.strokeRect(sMinX - 5, sMinY - 5, (sMaxX - sMinX) + 10, (sMaxY - sMinY) + 10);
-        ctx.setLineDash([]);
+        ctx.strokeRect(sMinX - 5, sMinY - 5, (sMaxX - sMinX) + 10, (sMaxY - sMinY) + 10); ctx.setLineDash([]);
     }
 
     if (boxSeleccion) { ctx.fillStyle = "rgba(33, 150, 243, 0.1)"; ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 1/camera.z; ctx.fillRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); ctx.strokeRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h); }
     const now = Date.now();
-    for (let id in lasersActivos) {
-        const lr = lasersActivos[id]; lr.points = lr.points.filter(pt => now - pt.t < 1500);
-        if (lr.points.length > 0) { ctx.beginPath(); ctx.strokeStyle = lr.color; ctx.lineWidth = 6 / camera.z; ctx.lineCap = "round"; ctx.shadowBlur = 10 / camera.z; ctx.shadowColor = lr.color; lr.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)); ctx.stroke(); ctx.shadowBlur = 0; } else delete lasersActivos[id];
-    }
+    for (let id in lasersActivos) { const lr = lasersActivos[id]; lr.points = lr.points.filter(pt => now - pt.t < 1500); if (lr.points.length > 0) { ctx.beginPath(); ctx.strokeStyle = lr.color; ctx.lineWidth = 6 / camera.z; ctx.lineCap = "round"; ctx.shadowBlur = 10 / camera.z; ctx.shadowColor = lr.color; lr.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)); ctx.stroke(); ctx.shadowBlur = 0; } else delete lasersActivos[id]; }
     ctx.restore();
-
-    // Actualizamos el minimapa al final del render
     dibujarMinimapa();
 }
 
@@ -394,6 +359,73 @@ function subirImagen() {
         const file = e.target.files[0]; if (!file) return; const r = new FileReader();
         r.onload = ev => { const img = new Image(); img.src = ev.target.result; img.onload = () => { const maxSize = 800; let w = img.width, h = img.height; if (w > maxSize || h > maxSize) { if (w > h) { h = (maxSize / w) * h; w = maxSize; } else { w = (maxSize / h) * w; h = maxSize; } } const tC = document.createElement('canvas'); tC.width = w; tC.height = h; const tX = tC.getContext('2d'); tX.fillStyle = "#ffffff"; tX.fillRect(0,0,w,h); tX.drawImage(img, 0, 0, w, h); const cSrc = tC.toDataURL('image/jpeg', 0.8); const fI = new Image(); fI.src = cSrc; fI.onload = () => { const vW = w > 300 ? 300 : w; const vH = (h/w)*vW; const cX = (-camera.x + canvas.width/2)/camera.z - vW/2; const cY = (-camera.y + canvas.height/2)/camera.z - vH/2; const o = { id: Math.random(), type:'image', x: cX, y: cY, w: vW, h: vH, src: cSrc, grosor: 1 }; o.imgObj = fI; elementos.push(o); socket.emit('dibujar', o); guardarEstado(); pedirRender(); }; }; }; r.readAsDataURL(file);
     }; iF.click();
+}
+
+// --- NUEVO: FUNCIÓN PARA IMPORTAR PDF ---
+function subirPDF() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf';
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Ponemos un pequeño cartel de "Cargando..."
+        const loadingToast = document.createElement('div');
+        loadingToast.innerHTML = '⏳ Procesando PDF...';
+        loadingToast.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#2196F3; color:white; padding:10px 20px; border-radius:20px; z-index:99999; box-shadow:0 4px 10px rgba(0,0,0,0.2);';
+        document.body.appendChild(loadingToast);
+
+        const fileReader = new FileReader();
+        fileReader.onload = async function() {
+            const typedarray = new Uint8Array(this.result);
+            const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            
+            // Calculamos dónde poner las páginas (en el centro de lo que estemos mirando)
+            let currentY = (-camera.y + canvas.height/2)/camera.z - 300; 
+            const startX = (-camera.x + canvas.width/2)/camera.z - 300;
+
+            // Recorremos cada página del PDF
+            for (let i = 1; i <= pdf.numPages; i++) {
+                const page = await pdf.getPage(i);
+                const viewport = page.getViewport({scale: 1.5}); // Escala 1.5 para buena resolución
+                
+                const tempCanvas = document.createElement('canvas');
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCanvas.width = viewport.width;
+                tempCanvas.height = viewport.height;
+                
+                // Dibujamos el PDF en el canvas temporal
+                await page.render({canvasContext: tempCtx, viewport: viewport}).promise;
+                
+                // Convertimos el canvas temporal a una imagen para la pizarra
+                const cSrc = tempCanvas.toDataURL('image/jpeg', 0.8);
+                const fI = new Image();
+                fI.src = cSrc;
+                
+                fI.onload = () => {
+                    const o = { 
+                        id: Math.random(), type:'image', 
+                        x: startX, y: currentY, 
+                        w: viewport.width, h: viewport.height, 
+                        src: cSrc, grosor: 1 
+                    };
+                    o.imgObj = fI;
+                    elementos.push(o);
+                    socket.emit('dibujar', o);
+                    guardarEstado();
+                    pedirRender();
+                    
+                    // Bajamos el "cursor" para que la siguiente página se dibuje debajo de esta
+                    currentY += viewport.height + 30; 
+                };
+            }
+            // Quitamos el cartel de carga
+            document.body.removeChild(loadingToast);
+        };
+        fileReader.readAsArrayBuffer(file);
+    };
+    input.click();
 }
 
 canvas.addEventListener('pointerdown', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') start(e); }); canvas.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') move(e); }); window.addEventListener('pointerup', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') end(e); });
