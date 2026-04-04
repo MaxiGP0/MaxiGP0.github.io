@@ -25,6 +25,38 @@ let renderRequerido = true;
 function pedirRender() { if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); } }
 setInterval(pedirRender, 1000/60);
 
+// --- NUEVA FUNCIÓN: EDITOR DE TEXTO MULTILÍNEA ---
+function mostrarEditorTexto(valorInicial, callback) {
+    const overlay = document.createElement('div');
+    overlay.id = 'text-editor-overlay';
+    
+    const modal = document.createElement('div');
+    modal.className = 'editor-modal';
+    
+    const textarea = document.createElement('textarea');
+    textarea.value = valorInicial;
+    textarea.placeholder = "Escribe aquí... (Enter para saltar línea)";
+    
+    const btn = document.createElement('button');
+    btn.innerText = "Guardar";
+    
+    modal.appendChild(textarea);
+    modal.appendChild(btn);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    setTimeout(() => textarea.focus(), 100);
+
+    const finalizar = () => {
+        const texto = textarea.value.trim();
+        if (texto) callback(texto);
+        document.body.removeChild(overlay);
+    };
+
+    btn.onclick = finalizar;
+    overlay.onclick = (e) => { if(e.target === overlay) finalizar(); };
+}
+
 function actualizarListaUI() {
     const list = document.getElementById('user-list');
     list.innerHTML = '';
@@ -47,11 +79,7 @@ function iniciarSeguimiento(id, nombre) {
     actualizarListaUI();
 }
 
-function dejarDeSeguir() {
-    siguiendoA = null;
-    document.getElementById('follow-banner').classList.add('hidden');
-    actualizarListaUI();
-}
+function dejarDeSeguir() { siguiendoA = null; document.getElementById('follow-banner').classList.add('hidden'); actualizarListaUI(); }
 document.getElementById('btn-unfollow').onclick = dejarDeSeguir;
 
 const enviarCursor = (() => {
@@ -104,28 +132,22 @@ function getPos(e) {
     return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
 }
 
-// --- ZOOM CON RUEDA DEL MOUSE (REINTEGRADO) ---
 canvas.addEventListener('wheel', e => {
     e.preventDefault(); dejarDeSeguir();
     const zoomSensitivity = 0.001;
     let newZ = camera.z * Math.exp(-e.deltaY * zoomSensitivity);
     newZ = Math.max(0.1, Math.min(newZ, 10));
-
     const r = canvas.getBoundingClientRect();
     const sX = canvas.width / r.width, sY = canvas.height / r.height;
     const mX = (e.clientX - r.left) * sX;
     const mY = (e.clientY - r.top) * sY;
-
     camera.x = mX - (mX - camera.x) * (newZ / camera.z);
     camera.y = mY - (mY - camera.y) * (newZ / camera.z);
-    camera.z = newZ;
-    pedirRender();
+    camera.z = newZ; pedirRender();
 }, { passive: false });
 
 const start = e => {
-    const ahora = Date.now();
-    const dif = ahora - ultimoClickTime;
-    ultimoClickTime = ahora;
+    const ahora = Date.now(); const dif = ahora - ultimoClickTime; ultimoClickTime = ahora;
     if(e.touches && e.touches.length === 2) {
         dejarDeSeguir(); isPanning = false; dibujando = false; seleccionados = [];
         const t1 = e.touches[0], t2 = e.touches[1]; initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
@@ -142,9 +164,13 @@ const start = e => {
             return p.x >= x && p.x <= x + Math.abs(el.w) && p.y >= y && p.y <= y + Math.abs(el.h);
         });
 
+        // EDITAR MULTILÍNEA CON DOBLE CLIC
         if (dif < 300 && hit && (hit.type === 'text' || hit.type === 'sticky')) {
-            const nuevo = prompt("Editar contenido:", hit.text);
-            if (nuevo !== null) { hit.text = nuevo; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
+            mostrarEditorTexto(hit.text, (nuevo) => {
+                hit.text = nuevo; guardarEstado(); 
+                if(historialCargado) socket.emit('sync_todo', elementos);
+                pedirRender();
+            });
             return;
         }
 
@@ -165,13 +191,19 @@ const start = e => {
     }
 
     if(modo === 'sticky') {
-        const t = prompt("Contenido de la nota:");
-        if(t) { const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: controls.color.value, w: 200, h: 200, grosor: 1 }; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); } return;
+        mostrarEditorTexto("", (t) => {
+            const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: controls.color.value, w: 200, h: 200, grosor: 1 }; 
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender();
+        });
+        return;
     }
 
     if(modo === 'text') {
-        const t = prompt("Escribe tu texto:");
-        if(t) { const obj = { type:'text', x: p.x, y: p.y, text: t, color: controls.color.value, w: 120, h: 30, grosor: 2 }; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); } return;
+        mostrarEditorTexto("", (t) => {
+            const obj = { type:'text', x: p.x, y: p.y, text: t, color: controls.color.value, w: 120, h: 30, grosor: 2 }; 
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender();
+        });
+        return;
     }
 
     dibujando = true;
@@ -262,34 +294,43 @@ function exportarJPG() {
     }, 50);
 }
 
+// --- FIX: RENDERIZADO DE MÚLTIPLES LÍNEAS ---
 function helperDibujarElemento(c, el, z) {
     c.strokeStyle = el.color; c.fillStyle = el.color; c.lineWidth = el.grosor; c.lineCap = "round"; c.lineJoin = "round";
     if(el.type==='pen'){ c.beginPath(); el.points.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y)); c.stroke(); }
     else if(el.type==='rect') c.strokeRect(el.x, el.y, el.w, el.h);
     else if(el.type==='line'){ c.beginPath(); c.moveTo(el.x, el.y); c.lineTo(el.x+el.w, el.y+el.h); c.stroke(); }
     else if(el.type==='ellipse'){ c.beginPath(); c.ellipse(el.x+el.w/2, el.y+el.h/2, Math.abs(el.w/2), Math.abs(el.h/2), 0, 0, Math.PI*2); c.stroke(); }
-    else if(el.type==='text'){ c.font = "24px Arial"; c.textBaseline = "top"; c.fillText(el.text, el.x, el.y); }
+    else if(el.type==='text'){ 
+        c.font = "24px Arial"; c.textBaseline = "top";
+        const lineas = el.text.split('\n');
+        lineas.forEach((lin, i) => c.fillText(lin, el.x, el.y + (i * 28))); 
+    }
     else if(el.type==='image' && el.imgObj) c.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
     else if(el.type==='sticky') {
         c.shadowColor = 'rgba(0,0,0,0.1)'; c.shadowBlur = 10; c.fillRect(el.x, el.y, el.w, el.h); c.shadowColor = 'transparent';
         c.fillStyle = "#222"; c.font = "bold 18px Arial"; c.textBaseline = "top";
-        const words = el.text.split(' '); let line = ''; let tY = el.y + 15;
-        for(let n = 0; n < words.length; n++) {
-            const test = line + words[n] + ' ';
-            if (c.measureText(test).width > el.w - 30 && n > 0) { c.fillText(line, el.x + 15, tY); line = words[n] + ' '; tY += 24; } 
-            else { line = test; }
-        }
-        c.fillText(line, el.x + 15, tY); if (tY + 30 > el.y + el.h) el.h = (tY - el.y) + 30; 
+        
+        const parrafos = el.text.split('\n');
+        let tY = el.y + 15;
+        parrafos.forEach(parr => {
+            const words = parr.split(' '); let line = '';
+            for(let n = 0; n < words.length; n++) {
+                const test = line + words[n] + ' ';
+                if (c.measureText(test).width > el.w - 30 && n > 0) { c.fillText(line, el.x + 15, tY); line = words[n] + ' '; tY += 24; } 
+                else { line = test; }
+            }
+            c.fillText(line, el.x + 15, tY); tY += 24;
+        });
+        if (tY + 15 > el.y + el.h) el.h = (tY - el.y) + 15; 
     }
 }
 
 function ejecutarRender() {
-    renderRequerido = false; 
-    ctx.fillStyle = "#fefefe"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    renderRequerido = false; ctx.fillStyle = "#fefefe"; ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.save(); ctx.translate(camera.x, camera.y); ctx.scale(camera.z, camera.z);
     ctx.strokeStyle = "#eeeeee"; ctx.lineWidth = 1 / camera.z; ctx.beginPath();
-    const stp = 40; const sX = (-camera.x/camera.z) - ((-camera.x/camera.z)%stp) - stp;
-    const sY = (-camera.y/camera.z) - ((-camera.y/camera.z)%stp) - stp;
+    const stp = 40; const sX = (-camera.x/camera.z) - ((-camera.x/camera.z)%stp) - stp; const sY = (-camera.y/camera.z) - ((-camera.y/camera.z)%stp) - stp;
     for(let x = sX; x < (canvas.width-camera.x)/camera.z + stp; x += stp) { ctx.moveTo(x, (-camera.y/camera.z)); ctx.lineTo(x, (canvas.height-camera.y)/camera.z); }
     for(let y = sY; y < (canvas.height-camera.y)/camera.z + stp; y += stp) { ctx.moveTo((-camera.x/camera.z), y); ctx.lineTo((canvas.width-camera.x)/camera.z, y); }
     ctx.stroke();
@@ -302,14 +343,6 @@ function ejecutarRender() {
     }
     ctx.restore();
 }
-
-window.addEventListener('keydown', e => {
-    if((e.key === 'Delete' || e.key === 'Backspace') && seleccionados.length > 0 && modo === 'select') { elementos = elementos.filter(el => !seleccionados.includes(el)); seleccionados = []; guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
-    if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
-    if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); redo(); }
-    if(e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); traerAlFrente(); }
-    if(e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); enviarAlFondo(); }
-});
 
 socket.on('dibujar', o => { if(o.type==='image'){ const i=new Image(); i.src=o.src; i.onload=()=>{o.imgObj=i; elementos.push(o); pedirRender();}; } else { elementos.push(o); pedirRender(); } });
 socket.on('cargar_historial', h => { elementos = h; historialCargado = true; elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); pedirRender(); if(historialUndo.length===0) guardarEstado(); });
