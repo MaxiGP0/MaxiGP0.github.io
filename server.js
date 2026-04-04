@@ -10,6 +10,8 @@ const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
 
+// NUEVO: Esto le permite al servidor leer datos JSON que le enviaremos para renombrar
+app.use(express.json()); 
 app.use(express.static('public'));
 
 // --- 1. CONEXIÓN A LA BASE DE DATOS ---
@@ -18,29 +20,43 @@ mongoose.connect(uri)
     .then(() => console.log("🟢 ¡Conectado a MongoDB! El cerebro está en línea."))
     .catch(err => console.error("🔴 Error conectando a MongoDB:", err));
 
-// --- 2. EL "MOLDE" DE LAS SALAS ---
+// --- 2. EL "MOLDE" DE LAS SALAS (ACTUALIZADO) ---
 const ProyectoSchema = new mongoose.Schema({
     _id: String,             
+    nombre: { type: String, default: 'Pizarra Sin Nombre' }, // <-- NUEVO: El nombre visual
     elementos: { type: Array, default: [] }, 
     fecha: { type: Date, default: Date.now }
 });
 const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 
-// 👇👇👇 ESTO ES LO NUEVO: LA API DEL DASHBOARD 👇👇👇
+// --- 3. LAS PUERTAS API (PARA EL DASHBOARD) ---
+
+// Puerta para Leer los proyectos
 app.get('/api/proyectos', async (req, res) => {
     try {
-        // Buscamos todas las salas en MongoDB, ordenadas de la más reciente a la más antigua
-        // Solo traemos el ID y la Fecha para no sobrecargar la memoria
-        const proyectos = await Proyecto.find({}, '_id fecha').sort({ fecha: -1 });
+        // Ahora también le pedimos a MongoDB que nos traiga el campo 'nombre'
+        const proyectos = await Proyecto.find({}, '_id nombre fecha').sort({ fecha: -1 });
         res.json(proyectos);
     } catch (error) {
-        res.status(500).json({ error: 'Error al cargar los proyectos' });
+        res.status(500).json({ error: 'Error al cargar' });
     }
 });
-// 👆👆👆 --------------------------------------- 👆👆👆
 
-// --- 3. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
-const PASSWORD_SALA = "test";
+// NUEVA PUERTA: Para renombrar un proyecto
+app.put('/api/proyectos/:id', async (req, res) => {
+    try {
+        const idSala = req.params.id;
+        const nuevoNombre = req.body.nombre;
+        // Buscamos la sala por su ID y le actualizamos solo el nombre
+        await Proyecto.findByIdAndUpdate(idSala, { nombre: nuevoNombre });
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ error: 'Error al renombrar' });
+    }
+});
+
+// --- 4. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
+const PASSWORD_SALA = "12345";
 
 io.use((socket, next) => {
     const { password, salaId } = socket.handshake.auth;
