@@ -26,7 +26,6 @@ function guardarEstado() {
     historialRedo = []; 
 }
 
-// FIX: Aplicar Estado (Recarga imágenes correctamente)
 function aplicarEstado(snapshotJSON) {
     if (!snapshotJSON) return;
     const data = typeof snapshotJSON === 'string' ? JSON.parse(snapshotJSON) : snapshotJSON;
@@ -36,7 +35,7 @@ function aplicarEstado(snapshotJSON) {
     elementos.forEach(el => { 
         if(el.type === 'image' && el.src){ 
             el.imgObj = new Image(); 
-            el.imgObj.onload = pedirRender; // Obliga a redibujar cuando la imagen esté lista
+            el.imgObj.onload = pedirRender; 
             el.imgObj.src = el.src; 
         }
     });
@@ -62,6 +61,9 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 let seleccionados = [], boxSeleccion = null, handleSeleccionado = null, lastMousePos = { x: 0, y: 0 };
 let lasersActivos = {}, miLaserId = null;
 let cursoresData = {}, siguiendoA = null, ultimoClickTime = 0;
+
+// --- FIX FANTASMAS: Variable para rastrear nuestra última posición conocida ---
+let miPosicionMundo = { x: 0, y: 0 };
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
@@ -103,7 +105,12 @@ document.getElementById('btn-unfollow').onclick = dejarDeSeguir;
 
 const enviarCursor = (() => {
     let inThrottle;
-    return (x, y) => { if (!inThrottle) { socket.emit('mover_cursor', { x, y, nombre: miNombre }); inThrottle = true; setTimeout(() => inThrottle = false, 50); } }
+    return (x, y) => { 
+        if (!inThrottle) { 
+            socket.emit('mover_cursor', { x, y, nombre: miNombre }); 
+            inThrottle = true; setTimeout(() => inThrottle = false, 50); 
+        } 
+    }
 })();
 
 function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
@@ -151,6 +158,8 @@ const start = e => {
         initialCamZ = camera.z; initialCamX = camera.x; initialCamY = camera.y; pinchCenter = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 }; return;
     }
     const p = getPos(e);
+    miPosicionMundo = { x: p.x, y: p.y }; // Guardamos para el Heartbeat
+
     if(modo === 'pan' || e.button === 1) { dejarDeSeguir(); isPanning = true; startPan = { x: p.rx - camera.x, y: p.ry - camera.y }; return; }
     if(modo === 'erase') { borrarEn(p); return; }
 
@@ -209,6 +218,8 @@ const move = e => {
         camera.z = newZ; pedirRender(); return;
     }
     const p = getPos(e);
+    miPosicionMundo = { x: p.x, y: p.y }; // Guardamos para el Heartbeat
+
     if(!dibujando && !isPanning) enviarCursor(p.x, p.y); 
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
 
@@ -265,40 +276,18 @@ function borrarEn(p) {
 
 function reiniciarLienzo() { if(confirm("¿Borrar todo?")) socket.emit('limpiar_todo'); }
 
-// FIX: Guardado y Cargado a prueba de fallos
 function guardarLocal() { 
     const blob = new Blob([JSON.stringify(elementos.map(el=>{const {imgObj,...r}=el; return r;}))], {type:"application/json"}); 
-    const a = document.createElement('a'); 
-    a.href = URL.createObjectURL(blob); 
-    a.download = "Pizarra_Proyecto.json"; 
-    document.body.appendChild(a); // Vital para que funcione en móviles
-    a.click(); 
-    document.body.removeChild(a);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = "Pizarra_Proyecto.json"; document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
 function cargarLocal() { 
-    const i = document.createElement('input'); 
-    i.type = 'file'; 
-    i.accept = '.json'; 
-    i.style.display = 'none';
-    document.body.appendChild(i); // Vital para que el navegador no lo borre antes de abrir
-
+    const i = document.createElement('input'); i.type = 'file'; i.accept = '.json'; i.style.display = 'none'; document.body.appendChild(i); 
     i.onchange = e => { 
-        const file = e.target.files[0];
-        if(!file) return;
-        const r = new FileReader(); 
-        r.onload = ev => { 
-            try {
-                aplicarEstado(ev.target.result); 
-                guardarEstado(); 
-            } catch(err) {
-                alert("Error: El archivo de la pizarra es inválido o está dañado.");
-            }
-            document.body.removeChild(i);
-        }; 
+        const file = e.target.files[0]; if(!file) return; const r = new FileReader(); 
+        r.onload = ev => { try { aplicarEstado(ev.target.result); guardarEstado(); } catch(err) { alert("Error al cargar."); } document.body.removeChild(i); }; 
         r.readAsText(file); 
-    }; 
-    i.click(); 
+    }; i.click(); 
 }
 
 function exportarJPG() {
@@ -384,26 +373,22 @@ socket.on('mover_cursor', d => {
 });
 socket.on('borrar_cursor', id => { if(cur[id]){ cur[id].remove(); delete cur[id]; } delete cursoresData[id]; if(siguiendoA === id) dejarDeSeguir(); actualizarListaUI(); });
 
-function subirImagen() {
-    const iF = document.createElement('input'); iF.type = 'file'; iF.accept = 'image/*';
-    iF.onchange = e => {
-        const file = e.target.files[0]; if (!file) return; const r = new FileReader();
-        r.onload = ev => {
-            const img = new Image(); img.src = ev.target.result;
-            img.onload = () => {
-                const maxSize = 800; let w = img.width, h = img.height;
-                if (w > maxSize || h > maxSize) { if (w > h) { h = (maxSize / w) * h; w = maxSize; } else { w = (maxSize / h) * w; h = maxSize; } }
-                const tC = document.createElement('canvas'); tC.width = w; tC.height = h; const tX = tC.getContext('2d'); tX.fillStyle = "#ffffff"; tX.fillRect(0,0,w,h); tX.drawImage(img, 0, 0, w, h);
-                const cSrc = tC.toDataURL('image/jpeg', 0.8); const fI = new Image(); fI.src = cSrc;
-                fI.onload = () => { const vW = w > 300 ? 300 : w; const vH = (h/w)*vW; const cX = (-camera.x + canvas.width/2)/camera.z - vW/2; const cY = (-camera.y + canvas.height/2)/camera.z - vH/2; const o = { id: Math.random(), type:'image', x: cX, y: cY, w: vW, h: vH, src: cSrc, grosor: 1 }; o.imgObj = fI; elementos.push(o); socket.emit('dibujar', o); guardarEstado(); pedirRender(); };
-            };
-        }; r.readAsDataURL(file);
-    }; iF.click();
-}
+// --- FIX FANTASMAS: HEARTBEAT (Latido) ---
+// Emitimos nuestra posición inicial apenas entramos
+setTimeout(() => {
+    socket.emit('mover_cursor', { x: miPosicionMundo.x, y: miPosicionMundo.y, nombre: miNombre });
+}, 500);
+
+// Emitimos un latido cada 2 segundos para que los usuarios nuevos nos vean aunque no nos movamos
+setInterval(() => {
+    socket.emit('mover_cursor', { x: miPosicionMundo.x, y: miPosicionMundo.y, nombre: miNombre });
+}, 2000);
+// ----------------------------------------
 
 canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); window.addEventListener('mouseup', end);
 canvas.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
 canvas.addEventListener('touchmove', e => { e.preventDefault(); move(e); }, {passive:false});
 canvas.addEventListener('touchend', e => { e.preventDefault(); end(e); }, {passive:false});
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; pedirRender(); });
+
 guardarEstado(); requestAnimationFrame(ejecutarRender);
