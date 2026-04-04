@@ -2,14 +2,16 @@
 const pass = prompt("🔐 Ingresa la contraseña secreta para entrar al cuaderno:");
 const socket = io({ auth: { password: pass } });
 
-// Si el servidor rechaza la contraseña...
 socket.on('connect_error', (err) => {
     alert("❌ " + err.message);
-    window.location.reload(); // Recargamos la página para volver a pedirla
+    window.location.reload(); 
 });
 
 const canvas = document.getElementById('pizarra');
-const ctx = canvas.getContext('2d');
+
+// ⚡ EL TRUCO DE LATENCIA PARA LÁPICES DIGITALES: { desynchronized: true }
+const ctx = canvas.getContext('2d', { desynchronized: true });
+
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
@@ -22,7 +24,7 @@ let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, 
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
 
-// --- ⚡ SISTEMA THROTTLING (Optimización de Red) ---
+// --- SISTEMA THROTTLING ---
 function throttle(func, limit) {
     let inThrottle;
     return function() {
@@ -36,12 +38,9 @@ function throttle(func, limit) {
     }
 }
 
-// En lugar de enviar la posición todo el tiempo, solo lo permite 1 vez cada 50 milisegundos
-const enviarCursor = throttle((x, y) => {
-    socket.emit('mover_cursor', { x, y });
-}, 50); 
-// ----------------------------------------------------
+const enviarCursor = throttle((x, y) => { socket.emit('mover_cursor', { x, y }); }, 50); 
 
+// --- MEMORIA ---
 function guardarEstado() {
     const snap = JSON.stringify(elementos.map(el => { const { imgObj, ...r } = el; return r; }));
     historialUndo.push(snap);
@@ -56,6 +55,20 @@ function aplicarEstado(s) {
     if(historialCargado) socket.emit('sync_todo', elementos);
 }
 
+function undo() {
+    if (historialUndo.length <= 1) return;
+    historialRedo.push(historialUndo.pop());
+    aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1]));
+}
+
+function redo() {
+    if (historialRedo.length === 0) return;
+    const p = JSON.parse(historialRedo.pop());
+    historialUndo.push(JSON.stringify(p));
+    aplicarEstado(p);
+}
+
+// --- BOTONES ---
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.addEventListener('click', () => {
         const id = btn.id;
@@ -64,6 +77,8 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         else if(id === 'btn-load') cargarLocal();
         else if(id === 'btn-clear') reiniciarLienzo();
         else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; render(); }
+        else if(id === 'btn-undo') undo(); // <-- BOTÓN NUEVO
+        else if(id === 'btn-redo') redo(); // <-- BOTÓN NUEVO
         else {
             document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
@@ -73,10 +88,12 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     });
 });
 
+// --- SISTEMA DE COORDENADAS ---
 function getPos(e) {
     const t = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
     const rect = canvas.getBoundingClientRect();
-    const sx = t.clientX - rect.left, sy = t.clientY - rect.top;
+    const sx = t.clientX - rect.left;
+    const sy = t.clientY - rect.top;
     return { x: (sx - camera.x) / camera.z, y: (sy - camera.y) / camera.z, rx: sx, ry: sy };
 }
 
@@ -88,6 +105,7 @@ function obtenerHandles(el) {
     ];
 }
 
+// --- EVENTOS DE INTERACCIÓN ---
 const start = e => {
     if(e.touches && e.touches.length === 2) {
         isPanning = false; dibujando = false; seleccionado = null;
@@ -150,8 +168,6 @@ const move = e => {
     }
 
     const p = getPos(e);
-    
-    // USAMOS EL THROTTLE AQUÍ PARA AHORRAR INTERNET
     if(!dibujando && !isPanning) enviarCursor(p.x, p.y); 
 
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; render(); return; }
@@ -238,7 +254,8 @@ function cargarLocal() {
     i.click();
 }
 
-function subirImagen(p) {
+// 🐛 FIX: FUNCIÓN DE IMAGEN CORREGIDA
+function subirImagen() {
     const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
     i.onchange = e => {
         const r = new FileReader();
@@ -246,7 +263,13 @@ function subirImagen(p) {
             const img = new Image(); img.src = ev.target.result;
             img.onload = () => {
                 const w = img.width > 300 ? 300 : img.width;
-                const obj = { id: Math.random(), type:'image', x: p.x, y: p.y, w: w, h: (img.height/img.width)*w, src: img.src, grosor: 1 };
+                const h = (img.height/img.width)*w;
+                
+                // Calculamos el centro exacto de la pantalla según la cámara
+                const centerX = (-camera.x + canvas.width / 2) / camera.z - w / 2;
+                const centerY = (-camera.y + canvas.height / 2) / camera.z - h / 2;
+
+                const obj = { id: Math.random(), type:'image', x: centerX, y: centerY, w: w, h: h, src: img.src, grosor: 1 };
                 obj.imgObj = img; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); render();
             };
         };
@@ -291,12 +314,8 @@ function render() {
 }
 
 window.addEventListener('keydown', e => {
-    if(e.ctrlKey && e.key === 'z') { e.preventDefault(); 
-        if (historialUndo.length > 1) { historialRedo.push(historialUndo.pop()); aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1])); }
-    }
-    if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); 
-        if (historialRedo.length > 0) { const p = JSON.parse(historialRedo.pop()); historialUndo.push(JSON.stringify(p)); aplicarEstado(p); }
-    }
+    if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+    if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); redo(); }
 });
 
 socket.on('dibujar', o => {
