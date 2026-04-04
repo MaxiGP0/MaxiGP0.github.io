@@ -21,13 +21,12 @@ let historialUndo = [], historialRedo = [];
 let historialCargado = false, cambioRealizado = false; 
 let initialPinchDist = null, initialCamZ = 1, initialCamX = 0, initialCamY = 0, pinchCenter = {x:0, y:0};
 
-// --- NUEVAS VARIABLES PARA SELECCIÓN MÚLTIPLE Y LÁSER ---
-let seleccionados = []; // Ahora es un Array para seleccionar varios
-let boxSeleccion = null; // El cuadro azul de selección
+let seleccionados = []; 
+let boxSeleccion = null; 
 let handleSeleccionado = null;
-let lastMousePos = { x: 0, y: 0 }; // Para mover en grupo
+let lastMousePos = { x: 0, y: 0 }; 
 
-let lasersActivos = {}; // Guarda los trazos de láser temporales
+let lasersActivos = {}; 
 let miLaserId = null;
 
 const controls = { color: document.getElementById('color-picker'), grosor: document.getElementById('width-slider') };
@@ -37,7 +36,6 @@ let renderRequerido = true;
 function pedirRender() {
     if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); }
 }
-// Forzamos el loop constante para que el láser se borre de forma animada
 setInterval(pedirRender, 1000/60); 
 
 function throttle(func, limit) {
@@ -49,7 +47,7 @@ function throttle(func, limit) {
         }
     }
 }
-// Ahora enviamos nuestro nombre junto con la posición
+
 const enviarCursor = throttle((x, y) => { socket.emit('mover_cursor', { x, y, nombre: miNombre }); }, 50); 
 
 function guardarEstado() {
@@ -64,6 +62,29 @@ function aplicarEstado(s) {
 }
 function undo() { if (historialUndo.length <= 1) return; historialRedo.push(historialUndo.pop()); aplicarEstado(JSON.parse(historialUndo[historialUndo.length-1])); }
 function redo() { if (historialRedo.length === 0) return; const p = JSON.parse(historialRedo.pop()); historialUndo.push(JSON.stringify(p)); aplicarEstado(p); }
+
+// --- NUEVO: SISTEMA DE CAPAS (Z-INDEX) ---
+function traerAlFrente() {
+    if (seleccionados.length === 0) return;
+    // Quitamos los seleccionados del array original
+    elementos = elementos.filter(el => !seleccionados.includes(el));
+    // Los ponemos al final para que se dibujen últimos (arriba)
+    elementos.push(...seleccionados);
+    guardarEstado();
+    if(historialCargado) socket.emit('sync_todo', elementos);
+    pedirRender();
+}
+
+function enviarAlFondo() {
+    if (seleccionados.length === 0) return;
+    // Quitamos los seleccionados
+    elementos = elementos.filter(el => !seleccionados.includes(el));
+    // Los ponemos al principio para que se dibujen primero (abajo de todo)
+    elementos.unshift(...seleccionados);
+    guardarEstado();
+    if(historialCargado) socket.emit('sync_todo', elementos);
+    pedirRender();
+}
 
 function subirImagen() {
     const inputFile = document.createElement('input'); inputFile.type = 'file'; inputFile.accept = 'image/*';
@@ -94,13 +115,29 @@ function subirImagen() {
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.addEventListener('click', () => {
         const id = btn.id;
-        if(id === 'btn-export') exportarJPG(); else if(id === 'btn-save') guardarLocal(); else if(id === 'btn-load') cargarLocal(); else if(id === 'btn-clear') reiniciarLienzo();
-        else if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; pedirRender(); } else if(id === 'btn-undo') undo(); else if(id === 'btn-redo') redo(); 
-        else if(id === 'btn-image') {
-            subirImagen(); document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); modo = 'select'; seleccionados = []; pedirRender();
-        } else {
-            document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); modo = id.replace('btn-', ''); seleccionados = []; pedirRender();
-        }
+        // Botones de acción directa (no cambian de herramienta)
+        if(id === 'btn-export') { exportarJPG(); return; }
+        if(id === 'btn-save') { guardarLocal(); return; }
+        if(id === 'btn-load') { cargarLocal(); return; }
+        if(id === 'btn-clear') { reiniciarLienzo(); return; }
+        if(id === 'btn-zoom_reset') { camera = {x:0, y:0, z:1}; pedirRender(); return; }
+        if(id === 'btn-undo') { undo(); return; }
+        if(id === 'btn-redo') { redo(); return; }
+        if(id === 'btn-front') { traerAlFrente(); return; } // BOTÓN FRENTE
+        if(id === 'btn-back') { enviarAlFondo(); return; }  // BOTÓN FONDO
+        
+        if(id === 'btn-image') {
+            subirImagen(); 
+            document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); 
+            btn.classList.add('active'); modo = 'select'; seleccionados = []; pedirRender(); return;
+        } 
+        
+        // Cambiar de herramienta
+        document.querySelectorAll('#toolbar button').forEach(b => b.classList.remove('active')); 
+        btn.classList.add('active'); 
+        modo = id.replace('btn-', ''); 
+        seleccionados = []; 
+        pedirRender();
     });
 });
 
@@ -132,14 +169,12 @@ const start = e => {
     if(modo === 'erase') { borrarEn(p); return; }
 
     if(modo === 'select') {
-        // 1. Revisar Handles (Solo si hay 1 objeto seleccionado)
         if(seleccionados.length === 1) {
             const radioAcierto = 30 / camera.z; 
             handleSeleccionado = obtenerHandles(seleccionados[0]).find(h => Math.hypot(p.x - h.x, p.y - h.y) < radioAcierto);
             if(handleSeleccionado) return;
         }
         
-        // 2. Revisar si tocamos algún objeto
         const hit = elementos.slice().reverse().find(el => {
             if(el.type === 'pen') return el.points.some(pt => Math.hypot(pt.x-p.x, pt.y-p.y) < (el.grosor + 15)/camera.z);
             const x = el.w < 0 ? el.x + el.w : el.x, y = el.h < 0 ? el.y + el.h : el.y;
@@ -147,11 +182,9 @@ const start = e => {
         });
 
         if(hit) {
-            // Si el objeto no estaba en la selección, lo convertimos en la única selección
             if (!seleccionados.includes(hit)) seleccionados = [hit];
             lastMousePos = { x: p.x, y: p.y };
         } else {
-            // Si tocamos el vacío, iniciamos el LAZO DE SELECCIÓN (Caja Azul)
             seleccionados = [];
             boxSeleccion = { startX: p.x, startY: p.y, x: p.x, y: p.y, w: 0, h: 0 };
         }
@@ -192,7 +225,7 @@ const move = e => {
         const pt = {x: p.x, y: p.y, t: Date.now()};
         lasersActivos[miLaserId].points.push(pt);
         socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: pt });
-        return; // El bucle se encarga del render
+        return; 
     }
 
     if(dibujando && elementoActual) {
@@ -203,17 +236,14 @@ const move = e => {
 
     if(modo === 'select') {
         if(boxSeleccion) {
-            // Actualizar caja de selección múltiple
             boxSeleccion.x = Math.min(p.x, boxSeleccion.startX); boxSeleccion.y = Math.min(p.y, boxSeleccion.startY);
             boxSeleccion.w = Math.abs(p.x - boxSeleccion.startX); boxSeleccion.h = Math.abs(p.y - boxSeleccion.startY);
         } else if(handleSeleccionado && seleccionados.length === 1) {
-            // Redimensionar 1 objeto
             const h = handleSeleccionado.n, el = seleccionados[0];
             if(h.includes('r')) el.w = p.x - el.x; if(h.includes('l')) { el.w += el.x - p.x; el.x = p.x; }
             if(h.includes('b')) el.h = p.y - el.y; if(h.includes('t')) { el.h += el.y - p.y; el.y = p.y; }
             cambioRealizado = true;
         } else if (seleccionados.length > 0 && (e.buttons === 1 || e.touches)) {
-            // Mover TODOS los objetos seleccionados
             const dx = p.x - lastMousePos.x; const dy = p.y - lastMousePos.y;
             seleccionados.forEach(el => {
                 if (el.type === 'pen') { el.points.forEach(pt => { pt.x += dx; pt.y += dy; }); } 
@@ -230,7 +260,6 @@ const end = e => {
     if(e && e.touches && e.touches.length < 2) initialPinchDist = null;
 
     if (boxSeleccion) {
-        // Calcular quién quedó atrapado en el lazo
         seleccionados = elementos.filter(el => {
             let elMinX, elMaxX, elMinY, elMaxY;
             if (el.type === 'pen') {
@@ -304,7 +333,7 @@ function ejecutarRender() {
         else if(el.type==='text'){ ctx.font = "24px Arial"; ctx.textBaseline = "top"; ctx.fillText(el.text, el.x, el.y); }
         else if(el.type==='image' && el.imgObj) ctx.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
         
-        // DIBUJAR MARCO DE SELECCIÓN
+        // DIBUJAR MARCO DE SELECCIÓN (Puede tener varios objetos)
         if(modo==='select' && seleccionados.includes(el)){
             ctx.setLineDash([5/camera.z, 5/camera.z]); ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 2/camera.z;
             
@@ -317,7 +346,7 @@ function ejecutarRender() {
             }
             
             ctx.setLineDash([]); ctx.fillStyle = "#2196F3";
-            // Solo mostramos puntos de resize si hay 1 solo objeto (y no es lápiz)
+            // Puntos de Resize (Solo si hay 1 elemento seleccionado)
             if (seleccionados.length === 1 && el.type !== 'pen') {
                 const hSize = 10 / camera.z; 
                 obtenerHandles(el).forEach(h => { ctx.fillRect(h.x - hSize/2, h.y - hSize/2, hSize, hSize); });
@@ -325,32 +354,27 @@ function ejecutarRender() {
         }
     });
 
-    // DIBUJAR CAJA DEL LAZO MULTIPLE
     if (boxSeleccion) {
         ctx.fillStyle = "rgba(33, 150, 243, 0.1)"; ctx.strokeStyle = "#2196F3"; ctx.lineWidth = 1/camera.z;
         ctx.fillRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h);
         ctx.strokeRect(boxSeleccion.x, boxSeleccion.y, boxSeleccion.w, boxSeleccion.h);
     }
 
-    // --- DIBUJAR LÁSER (Desaparición temporal) ---
     const now = Date.now();
     for (let id in lasersActivos) {
         const l = lasersActivos[id];
-        // Filtrar puntos que tengan más de 1.5 segundos de vida (1500ms)
         l.points = l.points.filter(pt => now - pt.t < 1500);
         
         if (l.points.length > 0) {
             ctx.beginPath();
             ctx.strokeStyle = l.color; ctx.lineWidth = 6 / camera.z; 
             ctx.lineCap = "round"; ctx.lineJoin = "round";
-            // Efecto Neón
             ctx.shadowBlur = 10 / camera.z; ctx.shadowColor = l.color;
-            
             l.points.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
             ctx.stroke();
-            ctx.shadowBlur = 0; // Apagar neón para no afectar otros dibujos
+            ctx.shadowBlur = 0; 
         } else {
-            delete lasersActivos[id]; // Si no hay puntos vivos, lo borramos de RAM
+            delete lasersActivos[id]; 
         }
     }
 
@@ -358,13 +382,16 @@ function ejecutarRender() {
 }
 
 window.addEventListener('keydown', e => {
-    // Si apretamos Borrar (Suprimir)
     if((e.key === 'Delete' || e.key === 'Backspace') && seleccionados.length > 0 && modo === 'select') {
         elementos = elementos.filter(el => !seleccionados.includes(el));
         seleccionados = []; guardarEstado(); pedirRender(); if(historialCargado) socket.emit('sync_todo', elementos);
     }
     if(e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
     if(e.ctrlKey && (e.key === 'y' || e.key === 'x')) { e.preventDefault(); redo(); }
+    
+    // ATAJOS TECLADO CAPAS
+    if(e.ctrlKey && e.key === 'ArrowUp') { e.preventDefault(); traerAlFrente(); }
+    if(e.ctrlKey && e.key === 'ArrowDown') { e.preventDefault(); enviarAlFondo(); }
 });
 
 socket.on('dibujar', o => {
@@ -378,7 +405,6 @@ socket.on('cargar_historial', h => {
 });
 socket.on('limpiar_todo', () => { elementos = []; seleccionados=[]; camera={x:0,y:0,z:1}; guardarEstado(); pedirRender(); });
 
-// Recibir Láser de amigos
 socket.on('dibujar_laser', data => {
     if(!lasersActivos[data.id]) lasersActivos[data.id] = { color: data.color, points: [] };
     lasersActivos[data.id].points.push(data.pt);
@@ -388,7 +414,6 @@ const cur = {};
 socket.on('mover_cursor', d => {
     if(!cur[d.id]){ 
         const v=document.createElement('div'); v.className='cursor-fantasma'; 
-        // Asignar el nombre como atributo para que CSS lo muestre
         v.setAttribute('data-nombre', d.nombre || "Anónimo"); 
         document.getElementById('cursores').appendChild(v); cur[d.id]=v; 
     }
