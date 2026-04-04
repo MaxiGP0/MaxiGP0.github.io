@@ -40,7 +40,7 @@ app.get('/api/proyectos', async (req, res) => {
 // 👆👆👆 --------------------------------------- 👆👆👆
 
 // --- 3. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
-const PASSWORD_SALA = "12345";
+const PASSWORD_SALA = "test";
 
 io.use((socket, next) => {
     const { password, salaId } = socket.handshake.auth;
