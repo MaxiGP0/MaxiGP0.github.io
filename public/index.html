@@ -4,17 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Mis Pizarras | Cuaderno Pro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 40px 20px; color: #333; }
         .container { max-width: 1000px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; flex-wrap: wrap; gap: 20px;}
-        h1 { margin: 0; font-size: 28px; color: #111; }
+        h1 { margin: 0; font-size: 28px; color: #111; display: flex; align-items: center; gap: 10px;}
         
         .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
-        .btn-nuevo { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); }
-        .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; }
+        .btn-nuevo { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); display: flex; align-items: center; gap: 5px;}
+        .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;}
         
-        /* NUEVO: Caja para unirse por código */
         .join-box { display: flex; background: white; border-radius: 30px; overflow: hidden; border: 1px solid #ccc; }
         .join-box input { border: none; padding: 10px 15px; outline: none; font-size: 14px; width: 140px; }
         .join-box button { background: #2196F3; color: white; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; transition: 0.2s; }
@@ -23,27 +23,28 @@
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 25px; }
         .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: all 0.2s; border: 1px solid #eaeaea; position: relative; cursor: pointer; }
         .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
-        .card-icon { font-size: 40px; margin-bottom: 15px; background: #e3f2fd; width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
+        .card-icon { margin-bottom: 15px; background: #e3f2fd; width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
         .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 60px; }
         .card-date { font-size: 13px; color: #888; margin: 0; }
         .card-actions { position: absolute; top: 15px; right: 15px; display: flex; gap: 5px; }
-        .btn-action { background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+        .btn-action { background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #555; }
         .btn-action:hover { background: #ddd; transform: scale(1.1); }
+        .btn-delete:hover { background: #ffebee; color: #f44336; }
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Hola, <span id="nombre-usuario"></span> 👋</h1>
+            <h1><span class="material-symbols-outlined" style="font-size: 32px; color: #4caf50;">waving_hand</span> Hola, <span id="nombre-usuario"></span></h1>
             <div class="header-actions">
                 <div class="join-box">
                     <input type="text" id="input-codigo" placeholder="Código de sala">
                     <button onclick="unirsePorCodigo()">Unirse</button>
                 </div>
 
-                <button class="btn-nuevo" onclick="crearNuevoProyecto()">➕ Nuevo Proyecto</button>
-                <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+                <button class="btn-nuevo" onclick="crearNuevoProyecto()"><span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nuevo Proyecto</button>
+                <button class="btn-logout" onclick="cerrarSesion()"><span class="material-symbols-outlined" style="font-size: 18px;">logout</span> Salir</button>
             </div>
         </div>
         <div class="grid" id="project-grid"><p style="text-align: center; color: #888;">Cargando...</p></div>
@@ -62,12 +63,9 @@
 
         function crearNuevoProyecto() { window.location.href = `pizarra.html?sala=${Math.random().toString(36).substr(2, 6)}`; }
 
-        // NUEVO: Función del botón Unirse
         function unirsePorCodigo() {
             const codigo = document.getElementById('input-codigo').value.trim();
-            if(codigo) {
-                window.location.href = `pizarra.html?sala=${codigo}`;
-            }
+            if(codigo) { window.location.href = `pizarra.html?sala=${codigo}`; }
         }
 
         async function renombrarProyecto(event, idSala, nombreActual) {
@@ -75,11 +73,7 @@
             const nuevoNombre = prompt("Nuevo nombre:", nombreActual);
             if (nuevoNombre && nuevoNombre.trim() !== "") {
                 try {
-                    await fetch(`/api/proyectos/${idSala}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                        body: JSON.stringify({ nombre: nuevoNombre.trim() }) 
-                    });
+                    await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ nombre: nuevoNombre.trim() }) });
                     cargarProyectos();
                 } catch (error) { alert("Error al renombrar."); }
             }
@@ -114,12 +108,12 @@
                     card.className = 'card';
                     card.onclick = () => { window.location.href = `pizarra.html?sala=${proj._id}`; };
                     card.innerHTML = `
-                        <div class="card-icon">🎨</div>
+                        <div class="card-icon"><span class="material-symbols-outlined" style="font-size: 32px; color: #2196F3;">draw</span></div>
                         <h3 class="card-title">${nombreMostrar}</h3>
                         <p class="card-date">Última edición: ${fechaStr}</p>
                         <div class="card-actions">
-                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')">✏️</button>
-                            <button class="btn-action" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')">🗑️</button>
+                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Editar Nombre"><span class="material-symbols-outlined" style="font-size: 18px;">edit</span></button>
+                            <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Borrar Pizarra"><span class="material-symbols-outlined" style="font-size: 18px;">delete</span></button>
                         </div>
                     `;
                     grid.appendChild(card);
