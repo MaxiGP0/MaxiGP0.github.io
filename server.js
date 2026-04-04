@@ -28,9 +28,12 @@ const ProyectoSchema = new mongoose.Schema({
 });
 const Proyecto = mongoose.model('Proyecto', ProyectoSchema);
 
-// --- 3. LAS PUERTAS API (PARA EL DASHBOARD) ---
+// --- 3. LA CONTRASEÑA MAESTRA ---
+const PASSWORD_SALA = "test"; // <-- La subimos aquí para usarla en todo el archivo
 
-// Leer
+// --- 4. LAS PUERTAS API PROTEGIDAS ---
+
+// Leer (Cualquiera puede ver la lista)
 app.get('/api/proyectos', async (req, res) => {
     try {
         const proyectos = await Proyecto.find({}, '_id nombre fecha').sort({ fecha: -1 });
@@ -38,27 +41,31 @@ app.get('/api/proyectos', async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error al cargar' }); }
 });
 
-// Renombrar
+// Renombrar (PROTEGIDO)
 app.put('/api/proyectos/:id', async (req, res) => {
     try {
+        // El policía revisa la contraseña
+        if (req.body.password !== PASSWORD_SALA) {
+            return res.status(401).json({ error: 'Contraseña incorrecta' });
+        }
         await Proyecto.findByIdAndUpdate(req.params.id, { nombre: req.body.nombre });
         res.json({ success: true });
     } catch (error) { res.status(500).json({ error: 'Error al renombrar' }); }
 });
 
-// NUEVA PUERTA: Borrar un proyecto
+// Borrar un proyecto (PROTEGIDO)
 app.delete('/api/proyectos/:id', async (req, res) => {
     try {
-        // Le pedimos a MongoDB que elimine el documento por completo
+        // El policía revisa la contraseña
+        if (req.body.password !== PASSWORD_SALA) {
+            return res.status(401).json({ error: 'Contraseña incorrecta' });
+        }
         await Proyecto.findByIdAndDelete(req.params.id);
         res.json({ success: true });
-    } catch (error) { 
-        res.status(500).json({ error: 'Error al borrar' }); 
-    }
+    } catch (error) { res.status(500).json({ error: 'Error al borrar' }); }
 });
 
-// --- 4. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
-const PASSWORD_SALA = "test";
+// --- 5. LÓGICA DE MULTIJUGADOR Y AUTOGUARDADO ---
 
 io.use((socket, next) => {
     const { password, salaId } = socket.handshake.auth;
