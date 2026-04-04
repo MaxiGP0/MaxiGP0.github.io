@@ -10,142 +10,109 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; }
         h1 { margin: 0; font-size: 28px; color: #111; }
         
-        .btn-nuevo { background: #4caf50; color: white; border: none; padding: 12px 24px; border-radius: 30px; font-size: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); transition: all 0.2s; }
-        .btn-nuevo:hover { background: #43a047; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4); }
-
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 25px; }
-
-        .card {
-            background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            text-decoration: none; color: inherit; display: flex; flex-direction: column; transition: all 0.2s; 
-            border: 1px solid #eaeaea; position: relative; cursor: pointer;
-        }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
+        .btn-nuevo { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); }
+        .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; margin-right: 10px; }
         
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 25px; }
+        .card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); display: flex; flex-direction: column; transition: all 0.2s; border: 1px solid #eaeaea; position: relative; cursor: pointer; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); border-color: #2196F3; }
         .card-icon { font-size: 40px; margin-bottom: 15px; background: #e3f2fd; width: 70px; height: 70px; display: flex; align-items: center; justify-content: center; border-radius: 12px; }
         .card-title { font-size: 18px; font-weight: bold; margin: 0 0 5px 0; padding-right: 60px; }
         .card-date { font-size: 13px; color: #888; margin: 0; }
-
         .card-actions { position: absolute; top: 15px; right: 15px; display: flex; gap: 5px; }
-        
-        .btn-action {
-            background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px;
-            cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; transition: 0.2s;
-        }
+        .btn-action { background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; }
         .btn-action:hover { background: #ddd; transform: scale(1.1); }
-        .btn-delete:hover { background: #ffebee; } 
-
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
     </style>
 </head>
 <body>
-
     <div class="container">
         <div class="header">
-            <h1>Mis Pizarras</h1>
-            <button class="btn-nuevo" onclick="crearNuevoProyecto()">➕ Nuevo Proyecto</button>
+            <h1>Hola, <span id="nombre-usuario"></span> 👋</h1>
+            <div>
+                <button class="btn-logout" onclick="cerrarSesion()">Cerrar Sesión</button>
+                <button class="btn-nuevo" onclick="crearNuevoProyecto()">➕ Nuevo Proyecto</button>
+            </div>
         </div>
-
-        <div class="grid" id="project-grid">
-            <p style="grid-column: 1/-1; text-align: center; color: #888;">Cargando proyectos desde la nube...</p>
-        </div>
+        <div class="grid" id="project-grid"><p style="text-align: center; color: #888;">Cargando...</p></div>
     </div>
 
     <script>
-        function crearNuevoProyecto() {
-            const nuevoId = Math.random().toString(36).substr(2, 6);
-            window.location.href = `pizarra.html?sala=${nuevoId}`;
+        // 1. Verificar si tiene Pase VIP, si no, echarlo al Login
+        const token = localStorage.getItem('token_cuaderno');
+        if (!token) window.location.href = 'login.html';
+        
+        // Poner su nombre en pantalla
+        document.getElementById('nombre-usuario').innerText = localStorage.getItem('nombre_usuario');
+
+        function cerrarSesion() {
+            localStorage.removeItem('token_cuaderno');
+            localStorage.removeItem('nombre_usuario');
+            window.location.href = 'login.html';
         }
 
-        async function renombrarProyecto(event, idSala, nombreActual) {
-            event.preventDefault(); 
-            event.stopPropagation(); 
-            
-            const nuevoNombre = prompt("Escribe el nuevo nombre para este proyecto:", nombreActual);
-            
-            if (nuevoNombre && nuevoNombre.trim() !== "") {
-                const pass = prompt("🔐 Ingresa la contraseña maestra para confirmar:");
-                if (!pass) return; 
+        function crearNuevoProyecto() { window.location.href = `pizarra.html?sala=${Math.random().toString(36).substr(2, 6)}`; }
 
+        async function renombrarProyecto(event, idSala, nombreActual) {
+            event.preventDefault(); event.stopPropagation(); 
+            const nuevoNombre = prompt("Nuevo nombre:", nombreActual);
+            if (nuevoNombre && nuevoNombre.trim() !== "") {
                 try {
-                    const respuesta = await fetch(`/api/proyectos/${idSala}`, {
+                    // Enviamos el Token en la cabecera (Header) "Authorization"
+                    await fetch(`/api/proyectos/${idSala}`, {
                         method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ nombre: nuevoNombre.trim(), password: pass.trim() }) 
+                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                        body: JSON.stringify({ nombre: nuevoNombre.trim() }) 
                     });
-                    
-                    if (!respuesta.ok) throw new Error("Contraseña incorrecta");
                     cargarProyectos();
-                } catch (error) { alert("❌ Error: Contraseña incorrecta o fallo de conexión."); }
+                } catch (error) { alert("Error al renombrar."); }
             }
         }
 
         async function borrarProyecto(event, idSala, nombreActual) {
-            event.preventDefault(); 
-            event.stopPropagation(); 
-            
-            const seguro = confirm(`⚠️ ¿Estás completamente seguro de que quieres borrar "${nombreActual}"?\n\nEsta acción no se puede deshacer.`);
-            
-            if (seguro) {
-                const pass = prompt("🔐 Ingresa la contraseña maestra para eliminar definitivamente:");
-                if (!pass) return; 
-
+            event.preventDefault(); event.stopPropagation(); 
+            if (confirm(`⚠️ ¿Borrar "${nombreActual}" para siempre?`)) {
                 try {
-                    const respuesta = await fetch(`/api/proyectos/${idSala}`, { 
+                    await fetch(`/api/proyectos/${idSala}`, { 
                         method: 'DELETE',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ password: pass.trim() }) 
+                        headers: { 'Authorization': `Bearer ${token}` }
                     });
-
-                    if (!respuesta.ok) throw new Error("Contraseña incorrecta");
                     cargarProyectos();
-                } catch (error) { alert("❌ Error: Contraseña incorrecta o fallo de conexión."); }
+                } catch (error) { alert("Error al borrar."); }
             }
         }
 
         async function cargarProyectos() {
             const grid = document.getElementById('project-grid');
             try {
-                const respuesta = await fetch('/api/proyectos');
+                const respuesta = await fetch('/api/proyectos', { headers: { 'Authorization': `Bearer ${token}` } });
+                if (respuesta.status === 401) return cerrarSesion(); // Si el token caducó, cerramos sesión
                 const proyectos = await respuesta.json();
                 grid.innerHTML = '';
-
-                if (proyectos.length === 0) {
-                    grid.innerHTML = `<div class="empty-state">No tienes ningún proyecto todavía. ¡Crea uno nuevo!</div>`;
-                    return;
-                }
+                if (proyectos.length === 0) return grid.innerHTML = `<div class="empty-state">No tienes proyectos. ¡Crea uno!</div>`;
 
                 proyectos.forEach(proj => {
                     const fechaObj = new Date(proj.fecha);
                     const fechaStr = fechaObj.toLocaleDateString() + ' a las ' + fechaObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     const nombreMostrar = proj.nombre && proj.nombre !== 'Pizarra Sin Nombre' ? proj.nombre : `Sala: ${proj._id}`;
+                    const nombreSeguro = nombreMostrar.replace(/'/g, "\\'");
 
-                    // FIX: Tarjeta como Div en lugar de Enlace
                     const card = document.createElement('div');
                     card.className = 'card';
                     card.onclick = () => { window.location.href = `pizarra.html?sala=${proj._id}`; };
-                    
-                    // Sanitizar nombre para evitar errores con comillas simples
-                    const nombreSeguro = nombreMostrar.replace(/'/g, "\\'");
-
                     card.innerHTML = `
                         <div class="card-icon">🎨</div>
                         <h3 class="card-title">${nombreMostrar}</h3>
                         <p class="card-date">Última edición: ${fechaStr}</p>
-                        
                         <div class="card-actions">
-                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Renombrar">✏️</button>
-                            <button class="btn-action btn-delete" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')" title="Borrar">🗑️</button>
+                            <button class="btn-action" onclick="renombrarProyecto(event, '${proj._id}', '${nombreSeguro}')">✏️</button>
+                            <button class="btn-action" onclick="borrarProyecto(event, '${proj._id}', '${nombreSeguro}')">🗑️</button>
                         </div>
                     `;
                     grid.appendChild(card);
                 });
-
-            } catch (error) {
-                grid.innerHTML = `<p style="color:red; grid-column: 1/-1;">Hubo un error al conectar con la base de datos.</p>`;
-            }
+            } catch (error) { grid.innerHTML = `<p style="color:red;">Error de conexión.</p>`; }
         }
-
         cargarProyectos();
     </script>
 </body>
