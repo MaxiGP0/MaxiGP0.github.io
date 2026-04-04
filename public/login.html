@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso | Cuaderno Pro</title>
+    <style>
+        body { 
+            font-family: -apple-system, sans-serif; 
+            background-color: #f4f7f6; 
+            margin: 0; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            height: 100vh; 
+            color: #333; 
+        }
+        .auth-container {
+            background: white; 
+            padding: 40px; 
+            border-radius: 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08); 
+            width: 100%; 
+            max-width: 400px; 
+            text-align: center;
+        }
+        .logo-icon { font-size: 50px; margin-bottom: 10px; }
+        h1 { margin: 0 0 10px 0; font-size: 24px; color: #111; }
+        p.subtitle { color: #888; margin-bottom: 30px; font-size: 15px; }
+
+        .tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #eee; }
+        .tab { 
+            flex: 1; padding: 10px; cursor: pointer; font-weight: bold; color: #888; transition: 0.3s; 
+        }
+        .tab.active { color: #2196F3; border-bottom: 3px solid #2196F3; }
+
+        .form-group { text-align: left; margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: bold; color: #555; }
+        input { 
+            width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 8px; 
+            font-size: 16px; box-sizing: border-box; outline: none; transition: 0.2s;
+        }
+        input:focus { border-color: #2196F3; box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1); }
+
+        .btn-submit { 
+            width: 100%; background: #2196F3; color: white; border: none; padding: 14px; 
+            border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; 
+            margin-top: 10px; transition: 0.2s; box-shadow: 0 4px 15px rgba(33, 150, 243, 0.3);
+        }
+        .btn-submit:hover { background: #1976D2; transform: translateY(-2px); }
+
+        .error-msg { color: #e53935; font-size: 14px; margin-top: 10px; display: none; }
+        .success-msg { color: #4caf50; font-size: 14px; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body>
+
+    <div class="auth-container">
+        <div class="logo-icon">🎨</div>
+        <h1>Cuaderno Pro</h1>
+        <p class="subtitle">Inicia sesión para ver tus proyectos</p>
+
+        <div class="tabs">
+            <div class="tab active" id="tab-login" onclick="cambiarPestaña('login')">Ingresar</div>
+            <div class="tab" id="tab-registro" onclick="cambiarPestaña('registro')">Crear Cuenta</div>
+        </div>
+
+        <form id="form-login" onsubmit="iniciarSesion(event)">
+            <div class="form-group">
+                <label>Correo Electrónico</label>
+                <input type="email" id="login-email" required placeholder="tu@correo.com">
+            </div>
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="login-password" required placeholder="••••••••">
+            </div>
+            <button type="submit" class="btn-submit">Entrar al Cuaderno</button>
+            <div id="login-error" class="error-msg"></div>
+        </form>
+
+        <form id="form-registro" style="display: none;" onsubmit="registrarUsuario(event)">
+            <div class="form-group">
+                <label>Tu Nombre</label>
+                <input type="text" id="reg-nombre" required placeholder="Ej. Juan Pérez">
+            </div>
+            <div class="form-group">
+                <label>Correo Electrónico</label>
+                <input type="email" id="reg-email" required placeholder="tu@correo.com">
+            </div>
+            <div class="form-group">
+                <label>Contraseña</label>
+                <input type="password" id="reg-password" required placeholder="Crea una contraseña">
+            </div>
+            <button type="submit" class="btn-submit" style="background: #4caf50; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3);">Registrarme</button>
+            <div id="reg-error" class="error-msg"></div>
+            <div id="reg-success" class="success-msg"></div>
+        </form>
+    </div>
+
+    <script>
+        // Efecto visual para cambiar entre Ingresar y Registro
+        function cambiarPestaña(tipo) {
+            document.getElementById('tab-login').classList.remove('active');
+            document.getElementById('tab-registro').classList.remove('active');
+            document.getElementById('form-login').style.display = 'none';
+            document.getElementById('form-registro').style.display = 'none';
+
+            document.getElementById('tab-' + tipo).classList.add('active');
+            document.getElementById('form-' + tipo).style.display = 'block';
+            
+            // Limpiar errores al cambiar de pestaña
+            document.querySelectorAll('.error-msg, .success-msg').forEach(el => el.style.display = 'none');
+        }
+
+        // Función para Registrarse
+        async function registrarUsuario(event) {
+            event.preventDefault(); // Evita que la página recargue al darle al botón
+            
+            const nombre = document.getElementById('reg-nombre').value;
+            const email = document.getElementById('reg-email').value;
+            const password = document.getElementById('reg-password').value;
+            const errorDiv = document.getElementById('reg-error');
+            const successDiv = document.getElementById('reg-success');
+
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+
+            try {
+                // Golpeamos la puerta de registro de nuestro servidor
+                const respuesta = await fetch('/api/auth/registro', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ nombre, email, password })
+                });
+
+                const data = await respuesta.json();
+
+                if (respuesta.ok) {
+                    successDiv.innerText = "¡Cuenta creada con éxito! Ahora inicia sesión.";
+                    successDiv.style.display = 'block';
+                    // Limpiamos los campos
+                    document.getElementById('form-registro').reset();
+                    // Pasamos a la pestaña de login tras 2 segundos
+                    setTimeout(() => cambiarPestaña('login'), 2000);
+                } else {
+                    errorDiv.innerText = data.error || "Ocurrió un error.";
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.innerText = "No se pudo conectar con el servidor.";
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Función para Iniciar Sesión
+        async function iniciarSesion(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            const errorDiv = document.getElementById('login-error');
+
+            errorDiv.style.display = 'none';
+
+            try {
+                // Golpeamos la puerta de login
+                const respuesta = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await respuesta.json();
+
+                if (respuesta.ok) {
+                    // ¡EL MOMENTO MÁGICO! 
+                    // Guardamos el pase VIP en el navegador para usarlo después
+                    localStorage.setItem('token_cuaderno', data.token);
+                    localStorage.setItem('nombre_usuario', data.usuario.nombre);
+                    
+                    // Redirigimos al usuario a su Dashboard
+                    window.location.href = 'index.html';
+                } else {
+                    errorDiv.innerText = data.error || "Datos incorrectos.";
+                    errorDiv.style.display = 'block';
+                }
+            } catch (err) {
+                errorDiv.innerText = "No se pudo conectar con el servidor.";
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        // Si el usuario ya tiene un pase guardado, lo mandamos directo al dashboard
+        if (localStorage.getItem('token_cuaderno')) {
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
