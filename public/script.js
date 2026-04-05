@@ -121,10 +121,26 @@ setInterval(() => { enviarCursor(miPosicionMundo.x, miPosicionMundo.y); }, 4000)
 function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 
-document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
-    btn.onclick = () => {
+// --- NUEVO: LÓGICA DE CLICS INCLUYENDO EL POPUP DE FORMAS ---
+document.querySelectorAll('#toolbar button[id^="btn-"], #shapes-popup button[id^="btn-"]').forEach(btn => {
+    btn.onclick = (e) => {
         const id = btn.id;
         
+        // 1. Abrir/Cerrar la paleta de formas
+        if (id === 'btn-shapes-group') {
+            const popup = document.getElementById('shapes-popup');
+            const rect = btn.getBoundingClientRect();
+            // Lo posicionamos justo debajo del botón usando JavaScript
+            popup.style.top = (rect.bottom + 10) + 'px';
+            popup.style.left = (rect.left + (rect.width / 2)) + 'px';
+            popup.style.transform = 'translateX(-50%)';
+            
+            popup.classList.toggle('show');
+            e.stopPropagation();
+            return;
+        }
+
+        // 2. Botones de Acción (No cambian de herramienta)
         if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home', 'btn-minimap', 'btn-users'].includes(id)) {
             if(id==='btn-export') exportarJPG(); 
             if(id==='btn-clear') reiniciarLienzo();
@@ -165,15 +181,43 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             return;
         }
 
+        // 3. Subidas directas
         if(id === 'btn-image') { subirImagen(); return; }
         if(id === 'btn-pdf') { subirPDF(); return; } 
         
-        document.querySelectorAll('#toolbar button:not(#btn-minimap):not(#btn-users)').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active'); 
+        // 4. CAMBIO DE HERRAMIENTAS DE DIBUJO
+        // Limpiar estilos activos de todos los botones principales
+        document.querySelectorAll('#toolbar button:not(#btn-minimap):not(#btn-users):not(#btn-shapes-group)').forEach(b => b.classList.remove('active'));
+        
+        // Si el clic viene de ADENTRO de la paleta de formas
+        if (btn.parentElement.id === 'shapes-popup') {
+            // Ponemos el botón Agrupador principal en "activo"
+            document.getElementById('btn-shapes-group').classList.add('active');
+            // Le robamos el ícono a la forma que tocaste para que sepas cuál está seleccionada
+            document.getElementById('shapes-icon').innerText = btn.querySelector('span').innerText;
+            // Escondemos la paleta
+            document.getElementById('shapes-popup').classList.remove('show');
+        } else {
+            // Si tocaste cualquier otra cosa normal (lapiz, goma, select)
+            btn.classList.add('active'); 
+            document.getElementById('btn-shapes-group').classList.remove('active');
+            // El ícono de formas vuelve a su ícono genérico
+            document.getElementById('shapes-icon').innerText = 'category';
+        }
+
         modo = id.replace('btn-', ''); 
         seleccionados = []; 
         pedirRender();
     };
+});
+
+// Cerrar la paleta de formas si tocas cualquier otro lado de la pantalla
+document.addEventListener('click', (e) => {
+    const popup = document.getElementById('shapes-popup');
+    const btnGroup = document.getElementById('btn-shapes-group');
+    if (popup && popup.classList.contains('show') && !popup.contains(e.target) && e.target !== btnGroup && !btnGroup.contains(e.target)) {
+        popup.classList.remove('show');
+    }
 });
 
 function getPos(e) {
@@ -368,7 +412,6 @@ function exportarJPG() {
     }, 50);
 }
 
-// --- ACTUALIZADO: NUEVAS FORMAS ---
 function helperDibujarElemento(c, el, z) {
     c.strokeStyle = el.color; c.fillStyle = el.color; c.lineWidth = el.grosor; c.lineCap = "round"; c.lineJoin = "round";
     
@@ -377,7 +420,6 @@ function helperDibujarElemento(c, el, z) {
         c.fillRect(el.x, el.y, el.w, el.h); c.strokeRect(el.x, el.y, el.w, el.h); c.setLineDash([]); return;
     }
 
-    // Normalizamos coordenadas para las nuevas formas geométricas
     let nx = el.w < 0 ? el.x + el.w : el.x;
     let ny = el.h < 0 ? el.y + el.h : el.y;
     let nw = Math.abs(el.w);
