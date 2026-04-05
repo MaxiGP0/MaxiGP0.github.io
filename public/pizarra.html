@@ -107,16 +107,15 @@
         }
         .editor-modal button.secondary-btn:hover { background: #bdbdbd; }
 
-        /* --- NUEVO: Estilos para la Paleta de Formas Flotante --- */
         #shapes-popup {
             display: none;
-            position: fixed; /* Se posiciona con JS según el botón */
+            position: fixed; 
             background: rgba(255, 255, 255, 0.98);
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.15);
             padding: 8px;
             z-index: 1001;
-            grid-template-columns: repeat(4, 1fr); /* 4 columnas de íconos */
+            grid-template-columns: repeat(4, 1fr); 
             gap: 6px;
             border: 1px solid #eee;
             backdrop-filter: blur(5px);
@@ -230,7 +229,9 @@
         <button id="btn-rect" title="Cuadrado"><span class="material-symbols-outlined">rectangle</span></button>
         <button id="btn-roundrect" title="Cuadrado Redondeado"><span class="material-symbols-outlined">rounded_corner</span></button>
         <button id="btn-ellipse" title="Círculo"><span class="material-symbols-outlined">circle</span></button>
-        <button id="btn-diamond" title="Rombo"><span class="material-symbols-outlined">diamond</span></button>
+        
+        <button id="btn-diamond" title="Rombo"><span class="material-symbols-outlined" style="transform: scale(1.15);">stat_0</span></button>
+        
         <button id="btn-triangle" title="Triángulo"><span class="material-symbols-outlined">change_history</span></button>
         <button id="btn-star" title="Estrella"><span class="material-symbols-outlined">star</span></button>
     </div>
