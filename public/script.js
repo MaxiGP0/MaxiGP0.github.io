@@ -133,46 +133,22 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             if(id==='btn-front') traerAlFrente(); 
             if(id==='btn-back') enviarAlFondo();
             
-            // --- FIX: BLINDAJE DEL BOTÓN DE GUARDAR COPIA ---
             if(id==='btn-home') {
                 if (miRol === 'invitado') {
                     const overlay = document.getElementById('save-copy-overlay');
                     overlay.style.display = 'flex';
-                    
                     document.getElementById('btn-leave-without-saving').onclick = () => window.location.href = 'index.html';
-                    
                     document.getElementById('btn-leave-and-save').onclick = async () => {
                         try {
                             const botonGuardar = document.getElementById('btn-leave-and-save');
-                            botonGuardar.innerText = "Guardando...";
-                            botonGuardar.disabled = true;
-                            
+                            botonGuardar.innerText = "Guardando..."; botonGuardar.disabled = true;
                             const elementosLimpios = elementos.map(el => { const { imgObj, ...datos } = el; return datos; });
-
-                            const respuesta = await fetch('/api/proyectos/clonar', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                                body: JSON.stringify({ elementos: elementosLimpios, nombre: 'Copia de Sala ' + miSala })
-                            });
-
-                            // Si el servidor rechaza (ej. por peso o error de DB), arrojamos un error para detener la redirección
-                            if (!respuesta.ok) {
-                                throw new Error("El servidor rechazó los datos (Status: " + respuesta.status + ")");
-                            }
-
-                            // Si todo salió perfecto, ahora sí volvemos al inicio
+                            const respuesta = await fetch('/api/proyectos/clonar', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ elementos: elementosLimpios, nombre: 'Copia de Sala ' + miSala }) });
+                            if (!respuesta.ok) throw new Error("Error en servidor");
                             window.location.href = 'index.html';
-                        } catch (e) { 
-                            console.error(e);
-                            alert("⚠️ Error al guardar la copia. Revisa tu conexión a internet."); 
-                            const botonGuardar = document.getElementById('btn-leave-and-save');
-                            botonGuardar.innerText = "Reintentar";
-                            botonGuardar.disabled = false;
-                        }
+                        } catch (e) { alert("⚠️ Error al guardar la copia. Revisa tu conexión a internet."); document.getElementById('btn-leave-and-save').innerText = "Reintentar"; document.getElementById('btn-leave-and-save').disabled = false; }
                     };
-                } else {
-                    window.location.href = 'index.html';
-                }
+                } else { window.location.href = 'index.html'; }
                 return;
             }
             
@@ -392,6 +368,7 @@ function exportarJPG() {
     }, 50);
 }
 
+// --- ACTUALIZADO: NUEVAS FORMAS ---
 function helperDibujarElemento(c, el, z) {
     c.strokeStyle = el.color; c.fillStyle = el.color; c.lineWidth = el.grosor; c.lineCap = "round"; c.lineJoin = "round";
     
@@ -400,10 +377,36 @@ function helperDibujarElemento(c, el, z) {
         c.fillRect(el.x, el.y, el.w, el.h); c.strokeRect(el.x, el.y, el.w, el.h); c.setLineDash([]); return;
     }
 
+    // Normalizamos coordenadas para las nuevas formas geométricas
+    let nx = el.w < 0 ? el.x + el.w : el.x;
+    let ny = el.h < 0 ? el.y + el.h : el.y;
+    let nw = Math.abs(el.w);
+    let nh = Math.abs(el.h);
+
     if(el.type==='pen'){ if (el.points.length === 1) { c.beginPath(); c.arc(el.points[0].x, el.points[0].y, el.grosor / 2, 0, Math.PI * 2); c.fill(); } else { c.beginPath(); el.points.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y)); c.stroke(); } }
     else if(el.type==='rect') c.strokeRect(el.x, el.y, el.w, el.h);
+    else if(el.type==='roundrect') { 
+        const r = Math.min(10, nw/2, nh/2); c.beginPath(); c.moveTo(nx + r, ny); c.lineTo(nx + nw - r, ny); c.arcTo(nx + nw, ny, nx + nw, ny + r, r); c.lineTo(nx + nw, ny + nh - r); c.arcTo(nx + nw, ny + nh, nx + nw - r, ny + nh, r); c.lineTo(nx + r, ny + nh); c.arcTo(nx, ny + nh, nx, ny + nh - r, r); c.lineTo(nx, ny + r); c.arcTo(nx, ny, nx + r, ny, r); c.stroke();
+    }
     else if(el.type==='line'){ c.beginPath(); c.moveTo(el.x, el.y); c.lineTo(el.x+el.w, el.y+el.h); c.stroke(); }
+    else if(el.type==='arrow'){ 
+        c.beginPath(); c.moveTo(el.x, el.y); c.lineTo(el.x+el.w, el.y+el.h); c.stroke();
+        const angle = Math.atan2(el.h, el.w); const headlen = 15 + el.grosor; 
+        c.beginPath(); c.moveTo(el.x+el.w, el.y+el.h); c.lineTo(el.x+el.w - headlen * Math.cos(angle - Math.PI / 6), el.y+el.h - headlen * Math.sin(angle - Math.PI / 6)); c.moveTo(el.x+el.w, el.y+el.h); c.lineTo(el.x+el.w - headlen * Math.cos(angle + Math.PI / 6), el.y+el.h - headlen * Math.sin(angle + Math.PI / 6)); c.stroke();
+    }
     else if(el.type==='ellipse'){ c.beginPath(); c.ellipse(el.x+el.w/2, el.y+el.h/2, Math.abs(el.w/2), Math.abs(el.h/2), 0, 0, Math.PI*2); c.stroke(); }
+    else if(el.type==='diamond'){
+        c.beginPath(); c.moveTo(nx + nw/2, ny); c.lineTo(nx + nw, ny + nh/2); c.lineTo(nx + nw/2, ny + nh); c.lineTo(nx, ny + nh/2); c.closePath(); c.stroke();
+    }
+    else if(el.type==='triangle'){
+        c.beginPath(); c.moveTo(nx + nw/2, ny); c.lineTo(nx + nw, ny + nh); c.lineTo(nx, ny + nh); c.closePath(); c.stroke();
+    }
+    else if(el.type==='star'){
+        const cx = nx + nw/2; const cy = ny + nh/2; const spikes = 5; const outerRadius = Math.min(nw, nh) / 2; const innerRadius = outerRadius / 2.5; let rot = Math.PI / 2 * 3; let step = Math.PI / spikes;
+        c.beginPath(); c.moveTo(cx, cy - outerRadius);
+        for (let i = 0; i < spikes; i++) { c.lineTo(cx + Math.cos(rot) * outerRadius, cy + Math.sin(rot) * outerRadius); rot += step; c.lineTo(cx + Math.cos(rot) * innerRadius, cy + Math.sin(rot) * innerRadius); rot += step; }
+        c.lineTo(cx, cy - outerRadius); c.closePath(); c.stroke();
+    }
     else if(el.type==='text'){ c.font = "24px Arial"; c.textBaseline = "top"; const lines = el.text.split('\n'); lines.forEach((lin, i) => c.fillText(lin, el.x, el.y + (i * 28))); }
     else if(el.type==='image' && el.imgObj) c.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
     else if(el.type==='sticky') { 
