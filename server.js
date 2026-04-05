@@ -9,13 +9,11 @@ const jwt = require('jsonwebtoken');
 const app = express();
 const server = http.createServer(app);
 
-// FIX: Aumentamos el límite de Socket.io a 50MB (Para aguantar PDFs grandes)
 const io = new Server(server, { 
     cors: { origin: "*", methods: ["GET", "POST"] },
-    maxHttpBufferSize: 5e7 // 50 MB 
+    maxHttpBufferSize: 5e7 
 });
 
-// FIX: Aumentamos el límite de lectura JSON de Express de 100kb a 50MB
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -79,6 +77,27 @@ const verificarToken = (req, res, next) => {
     } catch (error) { res.status(400).json({ error: 'Token inválido' }); }
 };
 
+// --- NUEVO: RUTA PARA CAMBIAR CONTRASEÑA ---
+app.put('/api/auth/cambiar-password', verificarToken, async (req, res) => {
+    try {
+        const { actual, nueva } = req.body;
+        const usuario = await Usuario.findById(req.usuario.id);
+        
+        // Verificamos que la contraseña actual ingresada sea correcta
+        const valida = await bcrypt.compare(actual, usuario.password);
+        if (!valida) return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
+        
+        // Encriptamos la nueva y la guardamos
+        const salt = await bcrypt.genSalt(10);
+        usuario.password = await bcrypt.hash(nueva, salt);
+        await usuario.save();
+        
+        res.json({ success: true });
+    } catch (error) { 
+        res.status(500).json({ error: 'Error interno al cambiar contraseña.' }); 
+    }
+});
+
 app.get('/api/proyectos', verificarToken, async (req, res) => {
     try {
         const proyectos = await Proyecto.find({ propietarioId: req.usuario.id }, '_id nombre carpeta fecha').sort({ fecha: -1 });
@@ -118,10 +137,7 @@ app.post('/api/proyectos/clonar', verificarToken, async (req, res) => {
             propietarioId: req.usuario.id
         });
         res.json({ success: true, id: nuevoId });
-    } catch (error) { 
-        console.error("Error clonando:", error);
-        res.status(500).json({ error: 'Error interno al guardar la copia' }); 
-    }
+    } catch (error) { res.status(500).json({ error: 'Error al guardar copia' }); }
 });
 
 io.use((socket, next) => {
