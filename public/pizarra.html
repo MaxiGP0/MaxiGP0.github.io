@@ -16,7 +16,16 @@
         #pantalla-espera p { color: #666; font-size: 18px; }
         #btn-cancelar { margin-top: 20px; padding: 10px 20px; background: #e0e0e0; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; }
 
-        /* --- NOTIFICACIONES ESTILO PREMIUM --- */
+        /* --- FIX: BAJAMOS EL CUADRO DE "EN LÍNEA" --- */
+        #user-list-container {
+            position: fixed !important;
+            top: 90px !important; /* Espacio suficiente debajo de la barra superior */
+            left: 20px !important;
+            z-index: 900 !important;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
         #contenedor-notificaciones { position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px; }
         .toast { 
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(8px);
@@ -35,15 +44,10 @@
         .btn-rechazar:hover { background: #ef9a9a; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
 
-        /* --- BARRA DE HERRAMIENTAS (MOVIDA ARRIBA) --- */
         #toolbar-container {
-            position: fixed; 
-            top: 20px; /* AQUÍ ESTÁ EL CAMBIO: Movido a la parte superior */
-            height: auto !important; 
-            left: 50%; transform: translateX(-50%);
+            position: fixed; top: 20px; height: auto !important; left: 50%; transform: translateX(-50%);
             background: white; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.15);
-            padding: 4px 8px; z-index: 1000; 
-            max-width: 95vw; overflow-x: auto; white-space: nowrap; 
+            padding: 4px 8px; z-index: 1000; max-width: 95vw; overflow-x: auto; white-space: nowrap; 
         }
         #toolbar-container::-webkit-scrollbar { display: none; } 
         #toolbar { display: flex; align-items: center; gap: 2px; }
@@ -145,8 +149,8 @@
             <button id="btn-crop" title="Recortar Imagen/PDF"><span class="material-symbols-outlined">crop</span></button>
             <div class="sep"></div>
             
-            <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:22px; height:22px; cursor: pointer;"> 
-            <div class="slider-box" style="width: 50px; display:flex; align-items:center; margin-left:4px;"><input type="range" id="width-slider" min="1" max="25" value="3" style="width: 100%;"></div>
+            <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:26px; height:26px; cursor: pointer; flex-shrink: 0;"> 
+            <div class="slider-box" style="width: 60px; display:flex; align-items:center; margin-left:6px; flex-shrink: 0;"><input type="range" id="width-slider" min="1" max="25" value="3" style="width: 100%;"></div>
             <div class="sep"></div>
             
             <button id="btn-export" title="Exportar JPG"><span class="material-symbols-outlined">photo_camera</span></button>
