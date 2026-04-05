@@ -9,7 +9,7 @@ document.getElementById('codigo-sala-ui').innerText = miSala;
 document.getElementById('sala-id-display').innerText = miSala;
 
 const miNombre = localStorage.getItem('nombre_usuario') || "Usuario";
-let miRol = 'dueño'; // NUEVO: Guardamos el rol del usuario
+let miRol = 'dueño'; 
 
 const socket = io({ auth: { token: token, salaId: miSala } });
 
@@ -20,7 +20,6 @@ socket.on('acceso_denegado', () => { document.getElementById('texto-espera').inn
 socket.on('acceso_permitido', (data) => {
     document.getElementById('pantalla-espera').style.display = 'none';
     
-    // FIX: Extraemos el historial y el rol del nuevo formato de datos
     elementos = data.historial; 
     miRol = data.rol;
     historialCargado = true;
@@ -134,7 +133,7 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             if(id==='btn-front') traerAlFrente(); 
             if(id==='btn-back') enviarAlFondo();
             
-            // NUEVO: INTERCEPCIÓN DEL BOTÓN HOME PARA INVITADOS
+            // --- FIX: BLINDAJE DEL BOTÓN DE GUARDAR COPIA ---
             if(id==='btn-home') {
                 if (miRol === 'invitado') {
                     const overlay = document.getElementById('save-copy-overlay');
@@ -144,20 +143,31 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
                     
                     document.getElementById('btn-leave-and-save').onclick = async () => {
                         try {
-                            document.getElementById('btn-leave-and-save').innerText = "Guardando...";
+                            const botonGuardar = document.getElementById('btn-leave-and-save');
+                            botonGuardar.innerText = "Guardando...";
+                            botonGuardar.disabled = true;
                             
-                            // Limpiamos los objetos de imagen pesados antes de enviar
                             const elementosLimpios = elementos.map(el => { const { imgObj, ...datos } = el; return datos; });
 
-                            await fetch('/api/proyectos/clonar', {
+                            const respuesta = await fetch('/api/proyectos/clonar', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                                 body: JSON.stringify({ elementos: elementosLimpios, nombre: 'Copia de Sala ' + miSala })
                             });
+
+                            // Si el servidor rechaza (ej. por peso o error de DB), arrojamos un error para detener la redirección
+                            if (!respuesta.ok) {
+                                throw new Error("El servidor rechazó los datos (Status: " + respuesta.status + ")");
+                            }
+
+                            // Si todo salió perfecto, ahora sí volvemos al inicio
                             window.location.href = 'index.html';
                         } catch (e) { 
-                            alert("Error al guardar copia"); 
-                            window.location.href = 'index.html'; 
+                            console.error(e);
+                            alert("⚠️ Error al guardar la copia. Revisa tu conexión a internet."); 
+                            const botonGuardar = document.getElementById('btn-leave-and-save');
+                            botonGuardar.innerText = "Reintentar";
+                            botonGuardar.disabled = false;
                         }
                     };
                 } else {
