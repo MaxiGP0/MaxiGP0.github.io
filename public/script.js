@@ -19,11 +19,7 @@ socket.on('acceso_denegado', () => { document.getElementById('texto-espera').inn
 
 socket.on('acceso_permitido', (data) => {
     document.getElementById('pantalla-espera').style.display = 'none';
-    
-    elementos = data.historial; 
-    miRol = data.rol;
-    historialCargado = true;
-    
+    elementos = data.historial; miRol = data.rol; historialCargado = true;
     elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); 
     pedirRender(); if(historialUndo.length===0) guardarEstado();
 });
@@ -77,6 +73,38 @@ let renderRequerido = true;
 function pedirRender() { if (!renderRequerido) { renderRequerido = true; requestAnimationFrame(ejecutarRender); } }
 setInterval(pedirRender, 1000/60);
 
+// --- FIX 2: SISTEMA DE SCROLL HÍBRIDO PARA LA BARRA DE HERRAMIENTAS ---
+const toolbarContainer = document.getElementById('toolbar-container');
+let isDraggingToolbar = false;
+let startToolbarX;
+let scrollToolbarLeft;
+
+// 1. Scroll con la rueda del mouse (vertical se transforma en horizontal)
+toolbarContainer.addEventListener('wheel', (e) => {
+    if (e.deltaY !== 0) {
+        toolbarContainer.scrollLeft += e.deltaY;
+        e.preventDefault(); 
+    }
+}, { passive: false });
+
+// 2. Drag & Drop (Arrastrar para hacer scroll en PC y móviles)
+toolbarContainer.addEventListener('mousedown', (e) => {
+    if(['INPUT', 'BUTTON'].includes(e.target.tagName)) return; // No bloquear botones ni controles
+    isDraggingToolbar = true;
+    startToolbarX = e.pageX - toolbarContainer.offsetLeft;
+    scrollToolbarLeft = toolbarContainer.scrollLeft;
+});
+toolbarContainer.addEventListener('mouseleave', () => isDraggingToolbar = false);
+toolbarContainer.addEventListener('mouseup', () => isDraggingToolbar = false);
+toolbarContainer.addEventListener('mousemove', (e) => {
+    if (!isDraggingToolbar) return;
+    e.preventDefault(); // Evita que se seleccione texto por accidente
+    const x = e.pageX - toolbarContainer.offsetLeft;
+    const walk = (x - startToolbarX) * 2; // Velocidad de arrastre
+    toolbarContainer.scrollLeft = scrollToolbarLeft - walk;
+});
+
+
 function guardarEstado() {
     const snapshot = JSON.stringify(elementos.map(el => { const { imgObj, ...datos } = el; return datos; }));
     if (historialUndo.length > 0 && historialUndo[historialUndo.length - 1] === snapshot) return;
@@ -121,26 +149,38 @@ setInterval(() => { enviarCursor(miPosicionMundo.x, miPosicionMundo.y); }, 4000)
 function traerAlFrente() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.push(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = elementos.filter(el => !seleccionados.includes(el)); elementos.unshift(...seleccionados); guardarEstado(); if(historialCargado) socket.emit('sync_todo', elementos); pedirRender(); }
 
-// --- NUEVO: LÓGICA DE CLICS INCLUYENDO EL POPUP DE FORMAS ---
+
+// --- FIX 1: POPUP DE FORMAS INTELIGENTE ---
 document.querySelectorAll('#toolbar button[id^="btn-"], #shapes-popup button[id^="btn-"]').forEach(btn => {
     btn.onclick = (e) => {
         const id = btn.id;
         
-        // 1. Abrir/Cerrar la paleta de formas
         if (id === 'btn-shapes-group') {
             const popup = document.getElementById('shapes-popup');
             const rect = btn.getBoundingClientRect();
-            // Lo posicionamos justo debajo del botón usando JavaScript
-            popup.style.top = (rect.bottom + 10) + 'px';
-            popup.style.left = (rect.left + (rect.width / 2)) + 'px';
-            popup.style.transform = 'translateX(-50%)';
             
-            popup.classList.toggle('show');
+            // Forzamos a que se muestre invisible para que el navegador calcule su ancho real
+            popup.classList.add('show');
+            const pRect = popup.getBoundingClientRect();
+            
+            let leftPos = rect.left + (rect.width / 2);
+            let topPos = rect.bottom + 10;
+            
+            // Si choca a la izquierda
+            if (leftPos - (pRect.width / 2) < 10) leftPos = (pRect.width / 2) + 10;
+            // Si choca a la derecha
+            if (leftPos + (pRect.width / 2) > window.innerWidth - 10) leftPos = window.innerWidth - (pRect.width / 2) - 10;
+            // Si choca abajo (abre hacia arriba)
+            if (topPos + pRect.height > window.innerHeight - 10) topPos = rect.top - pRect.height - 10;
+
+            popup.style.left = leftPos + 'px';
+            popup.style.top = topPos + 'px';
+            popup.style.transform = 'translateX(-50%)'; // Mantiene el centrado sobre el punto que calculamos
+            
             e.stopPropagation();
             return;
         }
 
-        // 2. Botones de Acción (No cambian de herramienta)
         if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home', 'btn-minimap', 'btn-users'].includes(id)) {
             if(id==='btn-export') exportarJPG(); 
             if(id==='btn-clear') reiniciarLienzo();
@@ -181,27 +221,18 @@ document.querySelectorAll('#toolbar button[id^="btn-"], #shapes-popup button[id^
             return;
         }
 
-        // 3. Subidas directas
         if(id === 'btn-image') { subirImagen(); return; }
         if(id === 'btn-pdf') { subirPDF(); return; } 
         
-        // 4. CAMBIO DE HERRAMIENTAS DE DIBUJO
-        // Limpiar estilos activos de todos los botones principales
         document.querySelectorAll('#toolbar button:not(#btn-minimap):not(#btn-users):not(#btn-shapes-group)').forEach(b => b.classList.remove('active'));
         
-        // Si el clic viene de ADENTRO de la paleta de formas
         if (btn.parentElement.id === 'shapes-popup') {
-            // Ponemos el botón Agrupador principal en "activo"
             document.getElementById('btn-shapes-group').classList.add('active');
-            // Le robamos el ícono a la forma que tocaste para que sepas cuál está seleccionada
             document.getElementById('shapes-icon').innerText = btn.querySelector('span').innerText;
-            // Escondemos la paleta
             document.getElementById('shapes-popup').classList.remove('show');
         } else {
-            // Si tocaste cualquier otra cosa normal (lapiz, goma, select)
             btn.classList.add('active'); 
             document.getElementById('btn-shapes-group').classList.remove('active');
-            // El ícono de formas vuelve a su ícono genérico
             document.getElementById('shapes-icon').innerText = 'category';
         }
 
@@ -211,7 +242,6 @@ document.querySelectorAll('#toolbar button[id^="btn-"], #shapes-popup button[id^
     };
 });
 
-// Cerrar la paleta de formas si tocas cualquier otro lado de la pantalla
 document.addEventListener('click', (e) => {
     const popup = document.getElementById('shapes-popup');
     const btnGroup = document.getElementById('btn-shapes-group');
