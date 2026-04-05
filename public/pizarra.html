@@ -35,16 +35,15 @@
         .btn-rechazar:hover { background: #ef9a9a; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(100%); } to { opacity: 1; transform: translateX(0); } }
 
-        /* --- FIX DEL BUG DEL RECTÁNGULO BLANCO Y AJUSTE DE TAMAÑOS --- */
+        /* --- BARRA DE HERRAMIENTAS (MOVIDA ARRIBA) --- */
         #toolbar-container {
             position: fixed; 
-            bottom: 20px; 
-            top: auto !important; /* FIX: Evita que el CSS heredado estire la barra */
-            height: auto !important; /* FIX: Fija la altura al contenido */
+            top: 20px; /* AQUÍ ESTÁ EL CAMBIO: Movido a la parte superior */
+            height: auto !important; 
             left: 50%; transform: translateX(-50%);
             background: white; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.15);
             padding: 4px 8px; z-index: 1000; 
-            max-width: 95vw; overflow-x: auto; white-space: nowrap; /* Activa el scroll si es muy ancha */
+            max-width: 95vw; overflow-x: auto; white-space: nowrap; 
         }
         #toolbar-container::-webkit-scrollbar { display: none; } 
         #toolbar { display: flex; align-items: center; gap: 2px; }
@@ -56,10 +55,10 @@
         #toolbar button:hover { background: #f0f0f0; }
         #toolbar button.active { background: #e3f2fd; color: #2196F3; }
         .sep { width: 1px; height: 20px; background: #ddd; margin: 0 4px; flex-shrink: 0; }
-        .material-symbols-outlined { font-size: 20px; } /* Iconos un poco más pequeños */
+        .material-symbols-outlined { font-size: 20px; } 
 
         #minimap-container {
-            position: fixed; bottom: 85px; right: 20px; width: 200px; height: 150px;
+            position: fixed; bottom: 20px; right: 20px; width: 200px; height: 150px;
             background: rgba(255, 255, 255, 0.95); border: 1px solid #eee; border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.15); z-index: 1000; overflow: hidden;
             display: none; cursor: crosshair; backdrop-filter: blur(5px);
