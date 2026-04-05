@@ -9,15 +9,22 @@ document.getElementById('codigo-sala-ui').innerText = miSala;
 document.getElementById('sala-id-display').innerText = miSala;
 
 const miNombre = localStorage.getItem('nombre_usuario') || "Usuario";
+let miRol = 'dueño'; // NUEVO: Guardamos el rol del usuario
+
 const socket = io({ auth: { token: token, salaId: miSala } });
 
 socket.on('connect_error', (err) => { alert("❌ Tu sesión ha caducado."); window.location.href = 'login.html'; });
 socket.on('esperando_aprobacion', () => { document.getElementById('texto-espera').innerText = "⏳ Esperando al dueño..."; });
 socket.on('acceso_denegado', () => { document.getElementById('texto-espera').innerText = "❌ Solicitud rechazada."; document.getElementById('btn-cancelar').style.background = "#2196F3"; document.getElementById('btn-cancelar').style.color = "white"; });
 
-socket.on('acceso_permitido', (historial) => {
+socket.on('acceso_permitido', (data) => {
     document.getElementById('pantalla-espera').style.display = 'none';
-    elementos = historial; historialCargado = true;
+    
+    // FIX: Extraemos el historial y el rol del nuevo formato de datos
+    elementos = data.historial; 
+    miRol = data.rol;
+    historialCargado = true;
+    
     elementos.forEach(el=>{if(el.type==='image'){el.imgObj=new Image(); el.imgObj.src=el.src;}}); 
     pedirRender(); if(historialUndo.length===0) guardarEstado();
 });
@@ -37,10 +44,8 @@ canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
 const miniCanvas = document.getElementById('minimap');
 const mCtx = miniCanvas.getContext('2d');
-
-// --- VARIABLES DE ESTADO PARA PANELES FLOTANTES ---
 let verMinimapa = false;
-let verUsuarios = true; // Encendido por defecto
+let verUsuarios = true;
 
 let pdfjsLib;
 try {
@@ -48,9 +53,7 @@ try {
         pdfjsLib = window['pdfjs-dist/build/pdf'];
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     }
-} catch (e) {
-    console.error("La librería PDF no pudo inicializarse correctamente.", e);
-}
+} catch (e) { console.error("La librería PDF no pudo inicializarse correctamente.", e); }
 
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
@@ -94,7 +97,7 @@ function mostrarEditorTexto(valorInicial, callback) {
     const overlay = document.createElement('div'); overlay.id = 'text-editor-overlay'; 
     const modal = document.createElement('div'); modal.className = 'editor-modal';
     const textarea = document.createElement('textarea'); textarea.value = valorInicial; textarea.placeholder = "Escribe aquí...";
-    const btn = document.createElement('button'); btn.innerText = "Guardar";
+    const btn = document.createElement('button'); btn.className = 'primary-btn'; btn.innerText = "Guardar";
     modal.appendChild(textarea); modal.appendChild(btn); overlay.appendChild(modal); document.body.appendChild(overlay); 
     setTimeout(() => { textarea.focus(); if (valorInicial) textarea.select(); }, 100);
     const finalizar = () => { const texto = textarea.value.trim(); if (texto) callback(texto); document.body.removeChild(overlay); };
@@ -123,7 +126,6 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.onclick = () => {
         const id = btn.id;
         
-        // Botones de acción instantánea o de encendido/apagado
         if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home', 'btn-minimap', 'btn-users'].includes(id)) {
             if(id==='btn-export') exportarJPG(); 
             if(id==='btn-clear') reiniciarLienzo();
@@ -131,7 +133,38 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             if(id==='btn-redo') redo(); 
             if(id==='btn-front') traerAlFrente(); 
             if(id==='btn-back') enviarAlFondo();
-            if(id==='btn-home') window.location.href = 'index.html'; 
+            
+            // NUEVO: INTERCEPCIÓN DEL BOTÓN HOME PARA INVITADOS
+            if(id==='btn-home') {
+                if (miRol === 'invitado') {
+                    const overlay = document.getElementById('save-copy-overlay');
+                    overlay.style.display = 'flex';
+                    
+                    document.getElementById('btn-leave-without-saving').onclick = () => window.location.href = 'index.html';
+                    
+                    document.getElementById('btn-leave-and-save').onclick = async () => {
+                        try {
+                            document.getElementById('btn-leave-and-save').innerText = "Guardando...";
+                            
+                            // Limpiamos los objetos de imagen pesados antes de enviar
+                            const elementosLimpios = elementos.map(el => { const { imgObj, ...datos } = el; return datos; });
+
+                            await fetch('/api/proyectos/clonar', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                                body: JSON.stringify({ elementos: elementosLimpios, nombre: 'Copia de Sala ' + miSala })
+                            });
+                            window.location.href = 'index.html';
+                        } catch (e) { 
+                            alert("Error al guardar copia"); 
+                            window.location.href = 'index.html'; 
+                        }
+                    };
+                } else {
+                    window.location.href = 'index.html';
+                }
+                return;
+            }
             
             if(id==='btn-minimap') {
                 verMinimapa = !verMinimapa;
@@ -149,7 +182,6 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
         if(id === 'btn-image') { subirImagen(); return; }
         if(id === 'btn-pdf') { subirPDF(); return; } 
         
-        // Quita la clase 'active' a todos MENOS a minimap y users
         document.querySelectorAll('#toolbar button:not(#btn-minimap):not(#btn-users)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active'); 
         modo = id.replace('btn-', ''); 
@@ -206,8 +238,8 @@ const start = e => {
 
     if(m === 'laser') { 
         dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); 
-        lasersActivos[miLaserId] = { color: "#ff3333", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
-        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: {x: p.x, y: p.y, t: Date.now()} }); 
+        lasersActivos[miLaserId] = { color: "#ff0000", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
+        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff0000", pt: {x: p.x, y: p.y, t: Date.now()} }); 
         return; 
     }
     
@@ -241,7 +273,7 @@ const move = e => {
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
     if(m === 'erase' && dibujando) { borrarEn(p); return; }
 
-    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: pt }); return; }
+    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff0000", pt: pt }); return; }
     if(dibujando && elementoActual) { if(m === 'pen') elementoActual.points.push({x: p.x, y: p.y}); else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; } pedirRender(); }
     
     if(m === 'select') {
