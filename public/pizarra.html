@@ -7,6 +7,7 @@
     <title>Pizarra | Cuaderno Pro</title>
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" rel="stylesheet" />
     <link rel="stylesheet" href="style.css">
+    
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 
     <style>
@@ -15,7 +16,6 @@
         #pantalla-espera p { color: #666; font-size: 18px; }
         #btn-cancelar { margin-top: 20px; padding: 10px 20px; background: #e0e0e0; border: none; border-radius: 20px; cursor: pointer; }
 
-        /* --- NUEVO ESTILO DE NOTIFICACIONES (TOAST) PREMIUM --- */
         #contenedor-notificaciones { position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px; }
         .toast { 
             background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
@@ -33,15 +33,12 @@
         .btn-rechazar:hover { background: #ffcdd2; }
         @keyframes slideIn { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: translateX(0); } }
 
-        /* --- AJUSTE DE TAMAÑO PARA LA BARRA DE HERRAMIENTAS --- */
         #toolbar-container {
             position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
             background: white; border-radius: 16px; box-shadow: 0 5px 25px rgba(0,0,0,0.15);
-            padding: 6px 12px; z-index: 1000;
-            max-width: 95vw; /* Si la pantalla es chica, no se saldrá de los bordes */
-            overflow-x: auto; /* Permite arrastrarla si tienes muchos iconos */
+            padding: 6px 12px; z-index: 1000; max-width: 95vw; overflow-x: auto;
         }
-        #toolbar-container::-webkit-scrollbar { display: none; } /* Oculta la barra de scroll visualmente */
+        #toolbar-container::-webkit-scrollbar { display: none; } 
         #toolbar { display: flex; align-items: center; gap: 2px; }
         #toolbar button { 
             display: flex; align-items: center; justify-content: center; 
@@ -51,8 +48,6 @@
         #toolbar button:hover { background: #f0f0f0; }
         #toolbar button.active { background: #e3f2fd; color: #2196F3; }
         .sep { width: 1px; height: 24px; background: #ddd; margin: 0 4px; flex-shrink: 0; }
-        
-        /* Iconos levemente más chicos para que quepan todos */
         .material-symbols-outlined { font-size: 22px; } 
 
         #minimap-container {
@@ -120,8 +115,6 @@
             <button id="btn-select" class="active" title="Seleccionar"><span class="material-symbols-outlined">arrow_selector_tool</span></button>
             <button id="btn-undo" title="Deshacer (Ctrl+Z)"><span class="material-symbols-outlined">undo</span></button>
             <button id="btn-redo" title="Rehacer (Ctrl+Y)"><span class="material-symbols-outlined">redo</span></button>
-            
-            <button id="btn-crop" title="Recortar Imagen/PDF"><span class="material-symbols-outlined">crop</span></button>
             <div class="sep"></div>
 
             <button id="btn-pan" title="Mover Lienzo"><span class="material-symbols-outlined">pan_tool</span></button>
@@ -142,6 +135,7 @@
 
             <button id="btn-front" title="Traer al Frente"><span class="material-symbols-outlined">flip_to_front</span></button>
             <button id="btn-back" title="Enviar al Fondo"><span class="material-symbols-outlined">flip_to_back</span></button>
+            <button id="btn-crop" title="Recortar Imagen/PDF"><span class="material-symbols-outlined">crop</span></button>
             <div class="sep"></div>
             
             <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:26px; height:26px; cursor: pointer;"> 
