@@ -16,7 +16,7 @@
         #pantalla-espera p { color: #666; font-size: 18px; }
         #btn-cancelar { margin-top: 20px; padding: 10px 20px; background: #e0e0e0; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; }
 
-        /* --- FIX: BAJAMOS EL CUADRO DE "EN LÍNEA" --- */
+        /* --- PANEL DE USUARIOS (AHORA ESTILO PREMIUM Y OCULTABLE) --- */
         #user-list-container {
             position: fixed !important;
             top: 90px !important; 
@@ -24,6 +24,13 @@
             z-index: 900 !important;
             max-height: calc(100vh - 120px);
             overflow-y: auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border: 1px solid #eee;
+            backdrop-filter: blur(5px);
+            min-width: 160px;
         }
 
         #contenedor-notificaciones { position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px; }
@@ -117,7 +124,6 @@
             <div style="font-size: 11px; color: #888; text-transform: uppercase; font-weight: bold; margin-bottom: 4px;">Código de sala</div>
             <b id="sala-id-display" style="font-size: 16px; color: #2196F3; letter-spacing: 1px;"></b>
         </div>
-        
         <h3 style="margin-top: 0; margin-bottom: 10px; display: flex; align-items: center; gap: 5px;">
             <span class="material-symbols-outlined" style="font-size: 18px; color: #555;">group</span> En línea
         </h3>
@@ -136,6 +142,7 @@
 
             <button id="btn-pan" title="Mover Lienzo"><span class="material-symbols-outlined">pan_tool</span></button>
             <button id="btn-minimap" title="Ver Minimapa"><span class="material-symbols-outlined">map</span></button>
+            <button id="btn-users" class="active" title="Mostrar/Ocultar Usuarios"><span class="material-symbols-outlined">group</span></button>
             <div class="sep"></div>
             
             <button id="btn-pen" title="Lápiz"><span class="material-symbols-outlined">draw</span></button>
