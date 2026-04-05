@@ -8,9 +8,17 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
 
-app.use(express.json()); 
+// FIX: Aumentamos el límite de Socket.io a 50MB (Para aguantar PDFs grandes)
+const io = new Server(server, { 
+    cors: { origin: "*", methods: ["GET", "POST"] },
+    maxHttpBufferSize: 5e7 // 50 MB 
+});
+
+// FIX: Aumentamos el límite de lectura JSON de Express de 100kb a 50MB
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
 app.use(express.static('public'));
 
 const uri = process.env.MONGO_URI;
@@ -99,19 +107,21 @@ app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
     } catch (error) { res.status(500).json({ error: 'Error al borrar' }); }
 });
 
-// --- NUEVO: RUTA PARA CLONAR (GUARDAR COPIA) ---
 app.post('/api/proyectos/clonar', verificarToken, async (req, res) => {
     try {
         const nuevoId = Math.random().toString(36).substr(2, 6);
         await Proyecto.create({
             _id: nuevoId,
             nombre: req.body.nombre || 'Copia Guardada',
-            carpeta: 'Guardados', // Carpeta por defecto para copias
+            carpeta: 'Guardados',
             elementos: req.body.elementos,
             propietarioId: req.usuario.id
         });
         res.json({ success: true, id: nuevoId });
-    } catch (error) { res.status(500).json({ error: 'Error al guardar copia' }); }
+    } catch (error) { 
+        console.error("Error clonando:", error);
+        res.status(500).json({ error: 'Error interno al guardar la copia' }); 
+    }
 });
 
 io.use((socket, next) => {
@@ -135,7 +145,6 @@ io.on('connection', async (socket) => {
 
     if (esElDueño) {
         socket.join(sala);
-        // FIX: Enviamos el rol
         socket.emit('acceso_permitido', { historial: proyecto.elementos, rol: 'dueño' });
     } else {
         socket.join(socket.id); 
@@ -151,7 +160,6 @@ io.on('connection', async (socket) => {
 
         if (aprobado) {
             guestSocket.join(sala);
-            // FIX: Enviamos el rol
             guestSocket.emit('acceso_permitido', { historial: p.elementos, rol: 'invitado' });
         } else {
             guestSocket.emit('acceso_denegado');
