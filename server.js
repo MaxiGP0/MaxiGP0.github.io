@@ -29,7 +29,7 @@ const Usuario = mongoose.model('Usuario', UsuarioSchema);
 const ProyectoSchema = new mongoose.Schema({
     _id: String,             
     nombre: { type: String, default: 'Pizarra Sin Nombre' }, 
-    carpeta: { type: String, default: 'Principal' }, // NUEVO: Sistema de carpetas
+    carpeta: { type: String, default: 'Principal' }, 
     elementos: { type: Array, default: [] }, 
     propietarioId: { type: String }, 
     fecha: { type: Date, default: Date.now }
@@ -82,12 +82,9 @@ app.put('/api/proyectos/:id', verificarToken, async (req, res) => {
     try {
         const p = await Proyecto.findById(req.params.id);
         if (p.propietarioId !== req.usuario.id) return res.status(403).json({ error: 'No eres el dueño' });
-        
-        // Permite actualizar nombre y carpeta
         const updates = {};
         if (req.body.nombre) updates.nombre = req.body.nombre;
         if (req.body.carpeta) updates.carpeta = req.body.carpeta;
-
         await Proyecto.findByIdAndUpdate(req.params.id, updates);
         res.json({ success: true });
     } catch (error) { res.status(500).json({ error: 'Error al editar' }); }
@@ -100,6 +97,21 @@ app.delete('/api/proyectos/:id', verificarToken, async (req, res) => {
         await Proyecto.findByIdAndDelete(req.params.id);
         res.json({ success: true });
     } catch (error) { res.status(500).json({ error: 'Error al borrar' }); }
+});
+
+// --- NUEVO: RUTA PARA CLONAR (GUARDAR COPIA) ---
+app.post('/api/proyectos/clonar', verificarToken, async (req, res) => {
+    try {
+        const nuevoId = Math.random().toString(36).substr(2, 6);
+        await Proyecto.create({
+            _id: nuevoId,
+            nombre: req.body.nombre || 'Copia Guardada',
+            carpeta: 'Guardados', // Carpeta por defecto para copias
+            elementos: req.body.elementos,
+            propietarioId: req.usuario.id
+        });
+        res.json({ success: true, id: nuevoId });
+    } catch (error) { res.status(500).json({ error: 'Error al guardar copia' }); }
 });
 
 io.use((socket, next) => {
@@ -123,7 +135,8 @@ io.on('connection', async (socket) => {
 
     if (esElDueño) {
         socket.join(sala);
-        socket.emit('acceso_permitido', proyecto.elementos);
+        // FIX: Enviamos el rol
+        socket.emit('acceso_permitido', { historial: proyecto.elementos, rol: 'dueño' });
     } else {
         socket.join(socket.id); 
         socket.emit('esperando_aprobacion');
@@ -138,7 +151,8 @@ io.on('connection', async (socket) => {
 
         if (aprobado) {
             guestSocket.join(sala);
-            guestSocket.emit('acceso_permitido', p.elementos);
+            // FIX: Enviamos el rol
+            guestSocket.emit('acceso_permitido', { historial: p.elementos, rol: 'invitado' });
         } else {
             guestSocket.emit('acceso_denegado');
         }
