@@ -38,7 +38,6 @@ const miniCanvas = document.getElementById('minimap');
 const mCtx = miniCanvas.getContext('2d');
 let verMinimapa = false;
 
-// --- NUEVO: CONFIGURACIÓN DE PDF.JS ---
 const pdfjsLib = window['pdfjs-dist/build/pdf'];
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
@@ -80,11 +79,17 @@ function aplicarEstado(snapshotJSON) {
 function undo() { if (historialUndo.length <= 1) return; historialRedo.push(historialUndo.pop()); aplicarEstado(historialUndo[historialUndo.length - 1]); }
 function redo() { if (historialRedo.length === 0) return; const sig = historialRedo.pop(); historialUndo.push(sig); aplicarEstado(sig); }
 
+// --- MEJORA: Modal centrado desde HTML/CSS ---
 function mostrarEditorTexto(valorInicial, callback) {
-    const overlay = document.createElement('div'); overlay.id = 'text-editor-overlay'; const modal = document.createElement('div'); modal.className = 'editor-modal';
+    const overlay = document.createElement('div'); overlay.id = 'text-editor-overlay'; 
+    const modal = document.createElement('div'); modal.className = 'editor-modal';
     const textarea = document.createElement('textarea'); textarea.value = valorInicial; textarea.placeholder = "Escribe aquí...";
     const btn = document.createElement('button'); btn.innerText = "Guardar";
-    modal.appendChild(textarea); modal.appendChild(btn); overlay.appendChild(modal); document.body.appendChild(overlay); setTimeout(() => textarea.focus(), 100);
+    modal.appendChild(textarea); modal.appendChild(btn); overlay.appendChild(modal); document.body.appendChild(overlay); 
+    
+    // Auto-seleccionar texto si existe
+    setTimeout(() => { textarea.focus(); if (valorInicial) textarea.select(); }, 100);
+    
     const finalizar = () => { const texto = textarea.value.trim(); if (texto) callback(texto); document.body.removeChild(overlay); };
     btn.onclick = finalizar; overlay.onclick = (e) => { if(e.target === overlay) finalizar(); };
 }
@@ -122,7 +127,7 @@ document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
             return;
         }
         if(id === 'btn-image') { subirImagen(); return; }
-        if(id === 'btn-pdf') { subirPDF(); return; } // Llamamos a la función del PDF
+        if(id === 'btn-pdf') { subirPDF(); return; } 
         
         document.querySelectorAll('#toolbar button:not(#btn-minimap)').forEach(b => b.classList.remove('active'));
         btn.classList.add('active'); modo = id.replace('btn-', ''); seleccionados = []; pedirRender();
@@ -176,10 +181,22 @@ const start = e => {
     }
 
     if(m === 'laser') { dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); lasersActivos[miLaserId] = { color: controls.color.value, points: [{x: p.x, y: p.y, t: Date.now()}] }; socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: {x: p.x, y: p.y, t: Date.now()} }); return; }
-    if(m === 'sticky') { mostrarEditorTexto("", (t) => { const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: controls.color.value, w: 200, h: 200, grosor: 1 }; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); }); return; }
+    
+    // --- MEJORA: Color Amarillo Forzado para Sticky Notes (#ffeb3b) ---
+    if(m === 'sticky') { 
+        mostrarEditorTexto("", (t) => { 
+            const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: "#ffeb3b", w: 200, h: 200, grosor: 1 }; 
+            elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); 
+        }); 
+        return; 
+    }
     if(m === 'text') { mostrarEditorTexto("", (t) => { const obj = { type:'text', x: p.x, y: p.y, text: t, color: controls.color.value, w: 120, h: 30, grosor: 2 }; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); }); return; }
 
-    dibujando = true; elementoActual = { id: Math.random(), type: m, x: p.x, y: p.y, w: 0, h: 0, color: controls.color.value, grosor: parseInt(controls.grosor.value), points: [{x:p.x, y:p.y}] }; pedirRender(); 
+    dibujando = true; 
+    // NUEVO: Modo Recorte usa color azul transparente temporal
+    const col = m === 'crop' ? 'rgba(33, 150, 243, 0.3)' : controls.color.value;
+    elementoActual = { id: Math.random(), type: m, x: p.x, y: p.y, w: 0, h: 0, color: col, grosor: parseInt(controls.grosor.value), points: [{x:p.x, y:p.y}] }; 
+    pedirRender(); 
 };
 
 const move = e => {
@@ -219,6 +236,7 @@ const move = e => {
 
 const end = e => {
     isPenEraser = false; 
+    
     if (boxSeleccion) {
         seleccionados = elementos.filter(el => {
             let eX, eW, eY, eH;
@@ -228,7 +246,66 @@ const end = e => {
         });
         boxSeleccion = null;
     }
-    if(dibujando && elementoActual) { elementos.push(elementoActual); socket.emit('dibujar', elementoActual); guardarEstado(); } 
+    
+    // --- NUEVO: LÓGICA DE RECORTAR ---
+    if (dibujando && modo === 'crop' && elementoActual) {
+        // Normalizamos coordenadas (por si dibujaron de derecha a izquierda)
+        const cropX = elementoActual.w < 0 ? elementoActual.x + elementoActual.w : elementoActual.x;
+        const cropY = elementoActual.h < 0 ? elementoActual.y + elementoActual.h : elementoActual.y;
+        const cropW = Math.abs(elementoActual.w);
+        const cropH = Math.abs(elementoActual.h);
+
+        // Buscamos si hay alguna imagen DEBAJO de esta selección
+        const imgParaRecortarIndex = elementos.findLastIndex(el => 
+            el.type === 'image' && 
+            cropX >= el.x && cropY >= el.y && 
+            cropX + cropW <= el.x + el.w && cropY + cropH <= el.y + el.h
+        );
+
+        if (imgParaRecortarIndex !== -1 && cropW > 10 && cropH > 10) {
+            const imgOriginal = elementos[imgParaRecortarIndex];
+            
+            // Creamos un canvas temporal solo con el pedacito que queremos
+            const tCanvas = document.createElement('canvas');
+            tCanvas.width = cropW; tCanvas.height = cropH;
+            const tCtx = tCanvas.getContext('2d');
+            
+            // Calculamos cuánto escalar según la resolución original de la imagen
+            const imgEl = imgOriginal.imgObj;
+            const scaleX = imgEl.width / imgOriginal.w;
+            const scaleY = imgEl.height / imgOriginal.h;
+            
+            const srcX = (cropX - imgOriginal.x) * scaleX;
+            const srcY = (cropY - imgOriginal.y) * scaleY;
+            const srcW = cropW * scaleX;
+            const srcH = cropH * scaleY;
+
+            tCtx.drawImage(imgEl, srcX, srcY, srcW, srcH, 0, 0, cropW, cropH);
+            
+            const newSrc = tCanvas.toDataURL('image/jpeg', 0.9);
+            const newImg = new Image();
+            newImg.src = newSrc;
+            
+            newImg.onload = () => {
+                const nuevoEl = { id: Math.random(), type:'image', x: cropX, y: cropY, w: cropW, h: cropH, src: newSrc, grosor: 1, imgObj: newImg };
+                
+                // Borramos la imagen vieja e insertamos la nueva
+                elementos.splice(imgParaRecortarIndex, 1);
+                elementos.push(nuevoEl);
+                
+                socket.emit('sync_todo', elementos);
+                guardarEstado();
+                pedirRender();
+            };
+        }
+        
+        dibujando = false;
+        elementoActual = null;
+        pedirRender();
+        return; // Salimos para que el recuadro azul de recorte no se guarde en la pizarra
+    }
+
+    if(dibujando && elementoActual && modo !== 'crop') { elementos.push(elementoActual); socket.emit('dibujar', elementoActual); guardarEstado(); } 
     else if (cambioRealizado) { if(historialCargado) socket.emit('sync_todo', elementos); guardarEstado(); cambioRealizado = false; }
     dibujando = isPanning = false; elementoActual = null; handleSeleccionado = null; pedirRender();
 };
@@ -260,13 +337,31 @@ function exportarJPG() {
 
 function helperDibujarElemento(c, el, z) {
     c.strokeStyle = el.color; c.fillStyle = el.color; c.lineWidth = el.grosor; c.lineCap = "round"; c.lineJoin = "round";
+    
+    // Si estamos en modo crop y dibujando el rectangulo, lo hacemos distinto (azul transparente)
+    if(el.type === 'crop') {
+        c.fillStyle = el.color; // Ya viene con el rgba transparente de arriba
+        c.strokeStyle = "#2196F3";
+        c.lineWidth = 2 / z;
+        c.setLineDash([5/z, 5/z]);
+        c.fillRect(el.x, el.y, el.w, el.h);
+        c.strokeRect(el.x, el.y, el.w, el.h);
+        c.setLineDash([]);
+        return;
+    }
+
     if(el.type==='pen'){ if (el.points.length === 1) { c.beginPath(); c.arc(el.points[0].x, el.points[0].y, el.grosor / 2, 0, Math.PI * 2); c.fill(); } else { c.beginPath(); el.points.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y)); c.stroke(); } }
     else if(el.type==='rect') c.strokeRect(el.x, el.y, el.w, el.h);
     else if(el.type==='line'){ c.beginPath(); c.moveTo(el.x, el.y); c.lineTo(el.x+el.w, el.y+el.h); c.stroke(); }
     else if(el.type==='ellipse'){ c.beginPath(); c.ellipse(el.x+el.w/2, el.y+el.h/2, Math.abs(el.w/2), Math.abs(el.h/2), 0, 0, Math.PI*2); c.stroke(); }
     else if(el.type==='text'){ c.font = "24px Arial"; c.textBaseline = "top"; const lines = el.text.split('\n'); lines.forEach((lin, i) => c.fillText(lin, el.x, el.y + (i * 28))); }
     else if(el.type==='image' && el.imgObj) c.drawImage(el.imgObj, el.x, el.y, el.w, el.h);
-    else if(el.type==='sticky') { c.shadowColor = 'rgba(0,0,0,0.1)'; c.shadowBlur = 10; c.fillRect(el.x, el.y, el.w, el.h); c.shadowColor = 'transparent'; c.fillStyle = "#222"; c.font = "bold 18px Arial"; c.textBaseline = "top"; const pars = el.text.split('\n'); let tY = el.y + 15; pars.forEach(parr => { const wds = parr.split(' '); let l = ''; for(let n = 0; n < wds.length; n++) { const test = l + wds[n] + ' '; if (c.measureText(test).width > el.w - 30 && n > 0) { c.fillText(l, el.x + 15, tY); l = wds[n] + ' '; tY += 24; } else { l = test; } } c.fillText(l, el.x + 15, tY); tY += 24; }); if (tY + 15 > el.y + el.h) el.h = (tY - el.y) + 15; }
+    else if(el.type==='sticky') { 
+        c.shadowColor = 'rgba(0,0,0,0.1)'; c.shadowBlur = 10; c.fillRect(el.x, el.y, el.w, el.h); c.shadowColor = 'transparent'; 
+        c.fillStyle = "#222"; c.font = "bold 18px Arial"; c.textBaseline = "top"; 
+        const pars = el.text.split('\n'); let tY = el.y + 15; 
+        pars.forEach(parr => { const wds = parr.split(' '); let l = ''; for(let n = 0; n < wds.length; n++) { const test = l + wds[n] + ' '; if (c.measureText(test).width > el.w - 30 && n > 0) { c.fillText(l, el.x + 15, tY); l = wds[n] + ' '; tY += 24; } else { l = test; } } c.fillText(l, el.x + 15, tY); tY += 24; }); if (tY + 15 > el.y + el.h) el.h = (tY - el.y) + 15; 
+    }
 }
 
 function dibujarMinimapa() {
@@ -361,71 +456,25 @@ function subirImagen() {
     }; iF.click();
 }
 
-// --- NUEVO: FUNCIÓN PARA IMPORTAR PDF ---
 function subirPDF() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'application/pdf';
+    const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/pdf';
     input.onchange = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-        
-        // Ponemos un pequeño cartel de "Cargando..."
-        const loadingToast = document.createElement('div');
-        loadingToast.innerHTML = '⏳ Procesando PDF...';
-        loadingToast.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#2196F3; color:white; padding:10px 20px; border-radius:20px; z-index:99999; box-shadow:0 4px 10px rgba(0,0,0,0.2);';
-        document.body.appendChild(loadingToast);
-
+        const file = e.target.files[0]; if (!file) return;
+        const loadingToast = document.createElement('div'); loadingToast.innerHTML = '⏳ Procesando PDF...'; loadingToast.style.cssText = 'position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#2196F3; color:white; padding:10px 20px; border-radius:20px; z-index:99999; box-shadow:0 4px 10px rgba(0,0,0,0.2);'; document.body.appendChild(loadingToast);
         const fileReader = new FileReader();
         fileReader.onload = async function() {
-            const typedarray = new Uint8Array(this.result);
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            
-            // Calculamos dónde poner las páginas (en el centro de lo que estemos mirando)
-            let currentY = (-camera.y + canvas.height/2)/camera.z - 300; 
-            const startX = (-camera.x + canvas.width/2)/camera.z - 300;
-
-            // Recorremos cada página del PDF
+            const typedarray = new Uint8Array(this.result); const pdf = await pdfjsLib.getDocument(typedarray).promise;
+            let currentY = (-camera.y + canvas.height/2)/camera.z - 300; const startX = (-camera.x + canvas.width/2)/camera.z - 300;
             for (let i = 1; i <= pdf.numPages; i++) {
-                const page = await pdf.getPage(i);
-                const viewport = page.getViewport({scale: 1.5}); // Escala 1.5 para buena resolución
-                
-                const tempCanvas = document.createElement('canvas');
-                const tempCtx = tempCanvas.getContext('2d');
-                tempCanvas.width = viewport.width;
-                tempCanvas.height = viewport.height;
-                
-                // Dibujamos el PDF en el canvas temporal
+                const page = await pdf.getPage(i); const viewport = page.getViewport({scale: 1.5});
+                const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d'); tempCanvas.width = viewport.width; tempCanvas.height = viewport.height;
                 await page.render({canvasContext: tempCtx, viewport: viewport}).promise;
-                
-                // Convertimos el canvas temporal a una imagen para la pizarra
-                const cSrc = tempCanvas.toDataURL('image/jpeg', 0.8);
-                const fI = new Image();
-                fI.src = cSrc;
-                
-                fI.onload = () => {
-                    const o = { 
-                        id: Math.random(), type:'image', 
-                        x: startX, y: currentY, 
-                        w: viewport.width, h: viewport.height, 
-                        src: cSrc, grosor: 1 
-                    };
-                    o.imgObj = fI;
-                    elementos.push(o);
-                    socket.emit('dibujar', o);
-                    guardarEstado();
-                    pedirRender();
-                    
-                    // Bajamos el "cursor" para que la siguiente página se dibuje debajo de esta
-                    currentY += viewport.height + 30; 
-                };
+                const cSrc = tempCanvas.toDataURL('image/jpeg', 0.8); const fI = new Image(); fI.src = cSrc;
+                fI.onload = () => { const o = { id: Math.random(), type:'image', x: startX, y: currentY, w: viewport.width, h: viewport.height, src: cSrc, grosor: 1 }; o.imgObj = fI; elementos.push(o); socket.emit('dibujar', o); guardarEstado(); pedirRender(); currentY += viewport.height + 30; };
             }
-            // Quitamos el cartel de carga
             document.body.removeChild(loadingToast);
-        };
-        fileReader.readAsArrayBuffer(file);
-    };
-    input.click();
+        }; fileReader.readAsArrayBuffer(file);
+    }; input.click();
 }
 
 canvas.addEventListener('pointerdown', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') start(e); }); canvas.addEventListener('pointermove', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') move(e); }); window.addEventListener('pointerup', e => { if(e.pointerType === 'mouse' || e.pointerType === 'pen') end(e); });
