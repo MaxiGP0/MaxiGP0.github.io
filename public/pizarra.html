@@ -76,17 +76,18 @@
         #minimap { width: 100%; height: 100%; }
         #minimap-label { position: absolute; top: 5px; left: 5px; font-size: 10px; color: #555; font-weight: bold; background: rgba(255,255,255,0.8); padding: 3px 6px; border-radius: 4px;}
 
-        #text-editor-overlay {
+        #text-editor-overlay, #save-copy-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.6); z-index: 999999;
             display: flex; justify-content: center; align-items: center; 
             backdrop-filter: blur(4px);
         }
         .editor-modal {
-            background: white; padding: 20px; border-radius: 12px;
+            background: white; padding: 25px; border-radius: 16px;
             box-shadow: 0 15px 35px rgba(0,0,0,0.2); width: 90%; max-width: 350px;
-            display: flex; flex-direction: column; gap: 12px;
+            display: flex; flex-direction: column; gap: 15px;
             animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-align: center;
         }
         @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         .editor-modal textarea {
@@ -95,11 +96,16 @@
             resize: none; outline: none; box-sizing: border-box; transition: 0.2s;
         }
         .editor-modal textarea:focus { border-color: #2196F3; }
-        .editor-modal button {
-            background: #2196F3; color: white; border: none; padding: 10px;
-            border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s;
+        .editor-modal button.primary-btn {
+            background: #2196F3; color: white; border: none; padding: 12px;
+            border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; flex: 1;
         }
-        .editor-modal button:hover { background: #1976D2; }
+        .editor-modal button.primary-btn:hover { background: #1976D2; }
+        .editor-modal button.secondary-btn {
+            background: #e0e0e0; color: #333; border: none; padding: 12px;
+            border-radius: 8px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; flex: 1;
+        }
+        .editor-modal button.secondary-btn:hover { background: #bdbdbd; }
     </style>
 </head>
 <body>
@@ -109,6 +115,17 @@
         <h2 id="texto-espera">Conectando a la sala...</h2>
         <p>Código: <b id="codigo-sala-ui"></b></p>
         <button id="btn-cancelar" onclick="window.location.href='index.html'">Volver al Inicio</button>
+    </div>
+
+    <div id="save-copy-overlay" style="display:none;">
+        <div class="editor-modal">
+            <h3 style="margin: 0; color: #111;">¿Guardar una copia?</h3>
+            <p style="color: #666; font-size: 14px; margin: 0;">Estás saliendo de una sala invitada. ¿Quieres guardar una copia de la pizarra actual en tu cuenta personal?</p>
+            <div style="display: flex; gap: 10px; margin-top: 10px;">
+                <button id="btn-leave-without-saving" class="secondary-btn">Salir sin guardar</button>
+                <button id="btn-leave-and-save" class="primary-btn">Guardar Copia</button>
+            </div>
+        </div>
     </div>
 
     <div id="contenedor-notificaciones"></div>
@@ -131,7 +148,7 @@
 
     <nav id="toolbar-container">
         <div id="toolbar">
-            <button id="btn-home" title="Volver al Inicio" onclick="window.location.href='index.html'"><span class="material-symbols-outlined">home</span></button>
+            <button id="btn-home" title="Volver al Inicio"><span class="material-symbols-outlined">home</span></button>
             <div class="sep"></div>
             
             <button id="btn-select" class="active" title="Seleccionar"><span class="material-symbols-outlined">arrow_selector_tool</span></button>
