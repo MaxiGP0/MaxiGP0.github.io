@@ -14,6 +14,7 @@ const socket = io({ auth: { token: token, salaId: miSala } });
 socket.on('connect_error', (err) => { alert("❌ Tu sesión ha caducado."); window.location.href = 'login.html'; });
 socket.on('esperando_aprobacion', () => { document.getElementById('texto-espera').innerText = "⏳ Esperando al dueño..."; });
 socket.on('acceso_denegado', () => { document.getElementById('texto-espera').innerText = "❌ Solicitud rechazada."; document.getElementById('btn-cancelar').style.background = "#2196F3"; document.getElementById('btn-cancelar').style.color = "white"; });
+
 socket.on('acceso_permitido', (historial) => {
     document.getElementById('pantalla-espera').style.display = 'none';
     elementos = historial; historialCargado = true;
@@ -38,9 +39,18 @@ const miniCanvas = document.getElementById('minimap');
 const mCtx = miniCanvas.getContext('2d');
 let verMinimapa = false;
 
-const pdfjsLib = window['pdfjs-dist/build/pdf'];
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+// Carga Segura de la Librería PDF
+let pdfjsLib;
+try {
+    if (window['pdfjs-dist/build/pdf']) {
+        pdfjsLib = window['pdfjs-dist/build/pdf'];
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    }
+} catch (e) {
+    console.error("La librería PDF no pudo inicializarse correctamente.", e);
+}
 
+// Vuelve a ser 'select' por defecto
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 let historialUndo = [], historialRedo = [], historialCargado = false, cambioRealizado = false;
@@ -176,7 +186,6 @@ const start = e => {
         pedirRender(); return;
     }
 
-    // --- MEJORA: Color Rojo forzado para Láser ---
     if(m === 'laser') { 
         dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); 
         lasersActivos[miLaserId] = { color: "#ff3333", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
@@ -184,7 +193,6 @@ const start = e => {
         return; 
     }
     
-    // --- MEJORA: Color Amarillo Pastel forzado para Sticky Notes ---
     if(m === 'sticky') { 
         mostrarEditorTexto("", (t) => { 
             const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: "#fff9c4", w: 200, h: 200, grosor: 1 }; 
@@ -215,7 +223,6 @@ const move = e => {
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
     if(m === 'erase' && dibujando) { borrarEn(p); return; }
 
-    // El Láser transmite en rojo (#ff3333)
     if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: pt }); return; }
     if(dibujando && elementoActual) { if(m === 'pen') elementoActual.points.push({x: p.x, y: p.y}); else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; } pedirRender(); }
     
@@ -440,6 +447,7 @@ function subirImagen() {
 }
 
 function subirPDF() {
+    if (!pdfjsLib) { alert("⚠️ La librería de PDFs aún está cargando. Intenta de nuevo en unos segundos."); return; }
     const input = document.createElement('input'); input.type = 'file'; input.accept = 'application/pdf';
     input.onchange = async (e) => {
         const file = e.target.files[0]; if (!file) return;
