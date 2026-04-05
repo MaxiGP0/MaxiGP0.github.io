@@ -54,8 +54,16 @@
             position: fixed; top: 20px; height: auto !important; left: 50%; transform: translateX(-50%);
             background: white; border-radius: 12px; box-shadow: 0 5px 25px rgba(0,0,0,0.15);
             padding: 4px 8px; z-index: 1000; max-width: 95vw; overflow-x: auto; white-space: nowrap; 
+            cursor: grab; /* Indicador visual de arrastre */
         }
-        #toolbar-container::-webkit-scrollbar { display: none; } 
+        #toolbar-container:active { cursor: grabbing; }
+
+        /* FIX: Barra de scroll fina y elegante para PC */
+        #toolbar-container::-webkit-scrollbar { height: 6px; } 
+        #toolbar-container::-webkit-scrollbar-track { background: transparent; margin: 10px; }
+        #toolbar-container::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+        #toolbar-container::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+
         #toolbar { display: flex; align-items: center; gap: 2px; }
         #toolbar button { 
             display: flex; align-items: center; justify-content: center; 
@@ -65,7 +73,7 @@
         #toolbar button:hover { background: #f0f0f0; }
         #toolbar button.active { background: #e3f2fd; color: #2196F3; }
         .sep { width: 1px; height: 20px; background: #ddd; margin: 0 4px; flex-shrink: 0; }
-        .material-symbols-outlined { font-size: 20px; } 
+        .material-symbols-outlined { font-size: 20px; pointer-events: none; } /* Evita bugs al arrastrar */
 
         #minimap-container {
             position: fixed; bottom: 20px; right: 20px; width: 200px; height: 150px;
@@ -124,7 +132,7 @@
             display: grid;
             animation: popDown 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
-        @keyframes popDown { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+        @keyframes popDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
         #shapes-popup button {
             background: transparent;
             border: none;
@@ -229,9 +237,7 @@
         <button id="btn-rect" title="Cuadrado"><span class="material-symbols-outlined">rectangle</span></button>
         <button id="btn-roundrect" title="Cuadrado Redondeado"><span class="material-symbols-outlined">rounded_corner</span></button>
         <button id="btn-ellipse" title="Círculo"><span class="material-symbols-outlined">circle</span></button>
-        
         <button id="btn-diamond" title="Rombo"><span class="material-symbols-outlined" style="transform: scale(1.15);">stat_0</span></button>
-        
         <button id="btn-triangle" title="Triángulo"><span class="material-symbols-outlined">change_history</span></button>
         <button id="btn-star" title="Estrella"><span class="material-symbols-outlined">star</span></button>
     </div>
