@@ -16,7 +16,6 @@
         #pantalla-espera p { color: #666; font-size: 18px; }
         #btn-cancelar { margin-top: 20px; padding: 10px 20px; background: #e0e0e0; border: none; border-radius: 20px; cursor: pointer; font-weight: bold; }
 
-        /* --- PANEL DE USUARIOS (AHORA ESTILO PREMIUM Y OCULTABLE) --- */
         #user-list-container {
             position: fixed !important;
             top: 90px !important; 
@@ -136,34 +135,35 @@
             <div class="sep"></div>
             
             <button id="btn-select" class="active" title="Seleccionar"><span class="material-symbols-outlined">arrow_selector_tool</span></button>
+            <button id="btn-pan" title="Mover Lienzo"><span class="material-symbols-outlined">pan_tool</span></button>
             <button id="btn-undo" title="Deshacer (Ctrl+Z)"><span class="material-symbols-outlined">undo</span></button>
             <button id="btn-redo" title="Rehacer (Ctrl+Y)"><span class="material-symbols-outlined">redo</span></button>
             <div class="sep"></div>
 
-            <button id="btn-pan" title="Mover Lienzo"><span class="material-symbols-outlined">pan_tool</span></button>
-            <button id="btn-minimap" title="Ver Minimapa"><span class="material-symbols-outlined">map</span></button>
-            <button id="btn-users" class="active" title="Mostrar/Ocultar Usuarios"><span class="material-symbols-outlined">group</span></button>
-            <div class="sep"></div>
+            <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:26px; height:26px; cursor: pointer; flex-shrink: 0;"> 
+            <div class="slider-box" style="width: 60px; display:flex; align-items:center; margin-left:6px; flex-shrink: 0;"><input type="range" id="width-slider" min="1" max="25" value="3" style="width: 100%;"></div>
             
             <button id="btn-pen" title="Lápiz"><span class="material-symbols-outlined">draw</span></button>
+            <button id="btn-erase" title="Goma"><span class="material-symbols-outlined">ink_eraser</span></button>
             <button id="btn-laser" title="Láser"><span class="material-symbols-outlined">flare</span></button> 
             <button id="btn-sticky" title="Nota Adhesiva"><span class="material-symbols-outlined">sticky_note_2</span></button>
+            <button id="btn-text" title="Texto"><span class="material-symbols-outlined">text_fields</span></button>
             <button id="btn-line" title="Línea"><span class="material-symbols-outlined">horizontal_rule</span></button>
             <button id="btn-rect" title="Cuadrado"><span class="material-symbols-outlined">rectangle</span></button>
             <button id="btn-ellipse" title="Círculo"><span class="material-symbols-outlined">circle</span></button>
-            <button id="btn-text" title="Texto"><span class="material-symbols-outlined">text_fields</span></button>
+            <div class="sep"></div>
+
             <button id="btn-image" title="Subir Imagen"><span class="material-symbols-outlined">image</span></button>
             <button id="btn-pdf" title="Importar PDF"><span class="material-symbols-outlined">picture_as_pdf</span></button>
-            <button id="btn-erase" title="Goma"><span class="material-symbols-outlined">ink_eraser</span></button>
+            <div class="sep"></div>
+
+            <button id="btn-minimap" title="Ver Minimapa"><span class="material-symbols-outlined">map</span></button>
+            <button id="btn-users" class="active" title="Mostrar/Ocultar Usuarios"><span class="material-symbols-outlined">group</span></button>
             <div class="sep"></div>
 
             <button id="btn-front" title="Traer al Frente"><span class="material-symbols-outlined">flip_to_front</span></button>
             <button id="btn-back" title="Enviar al Fondo"><span class="material-symbols-outlined">flip_to_back</span></button>
             <button id="btn-crop" title="Recortar Imagen/PDF"><span class="material-symbols-outlined">crop</span></button>
-            <div class="sep"></div>
-            
-            <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:26px; height:26px; cursor: pointer; flex-shrink: 0;"> 
-            <div class="slider-box" style="width: 60px; display:flex; align-items:center; margin-left:6px; flex-shrink: 0;"><input type="range" id="width-slider" min="1" max="25" value="3" style="width: 100%;"></div>
             <div class="sep"></div>
             
             <button id="btn-export" title="Exportar JPG"><span class="material-symbols-outlined">photo_camera</span></button>
