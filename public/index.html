@@ -103,7 +103,7 @@
 
         async function moverCarpeta(event, idSala, carpetaActual) {
             event.preventDefault(); event.stopPropagation(); 
-            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Álgebra, Arch Linux, General):", carpetaActual || 'Principal');
+            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Algebra, Principal):", carpetaActual || 'Principal');
             if (nuevaCarpeta && nuevaCarpeta.trim() !== "") {
                 await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ carpeta: nuevaCarpeta.trim() }) });
                 cargarProyectos();
