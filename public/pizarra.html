@@ -15,30 +15,59 @@
         #pantalla-espera p { color: #666; font-size: 18px; }
         #btn-cancelar { margin-top: 20px; padding: 10px 20px; background: #e0e0e0; border: none; border-radius: 20px; cursor: pointer; }
 
+        /* --- NUEVO ESTILO DE NOTIFICACIONES (TOAST) PREMIUM --- */
         #contenedor-notificaciones { position: fixed; top: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 10px; }
-        .toast { background: white; padding: 15px 20px; border-radius: 12px; box-shadow: 0 5px 20px rgba(0,0,0,0.15); border-left: 5px solid #2196F3; animation: slideIn 0.3s ease-out; display: flex; flex-direction: column; gap: 10px; }
-        .toast-btns { display: flex; gap: 10px; }
-        .btn-aceptar { background: #4caf50; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
-        .btn-rechazar { background: #f44336; color: white; border: none; padding: 5px 15px; border-radius: 5px; cursor: pointer; }
-        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .toast { 
+            background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);
+            padding: 16px 20px; border-radius: 16px; 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1); 
+            border: 1px solid rgba(0,0,0,0.05); border-left: 5px solid #2196F3; 
+            animation: slideIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); 
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .toast span { font-size: 15px; color: #333; display: flex; align-items: center; }
+        .toast-btns { display: flex; gap: 8px; }
+        .btn-aceptar { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; font-weight: bold; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: 0.2s; flex: 1; }
+        .btn-aceptar:hover { background: #c8e6c9; }
+        .btn-rechazar { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; font-weight: bold; padding: 8px 16px; border-radius: 8px; cursor: pointer; transition: 0.2s; flex: 1; }
+        .btn-rechazar:hover { background: #ffcdd2; }
+        @keyframes slideIn { from { opacity: 0; transform: translateX(50px); } to { opacity: 1; transform: translateX(0); } }
 
-        #toolbar button { display: flex; align-items: center; justify-content: center; font-size: 20px;}
-        .material-symbols-outlined { font-size: 24px; }
+        /* --- AJUSTE DE TAMAÑO PARA LA BARRA DE HERRAMIENTAS --- */
+        #toolbar-container {
+            position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: white; border-radius: 16px; box-shadow: 0 5px 25px rgba(0,0,0,0.15);
+            padding: 6px 12px; z-index: 1000;
+            max-width: 95vw; /* Si la pantalla es chica, no se saldrá de los bordes */
+            overflow-x: auto; /* Permite arrastrarla si tienes muchos iconos */
+        }
+        #toolbar-container::-webkit-scrollbar { display: none; } /* Oculta la barra de scroll visualmente */
+        #toolbar { display: flex; align-items: center; gap: 2px; }
+        #toolbar button { 
+            display: flex; align-items: center; justify-content: center; 
+            background: transparent; border: none; padding: 8px; 
+            border-radius: 8px; cursor: pointer; color: #555; transition: 0.2s; flex-shrink: 0;
+        }
+        #toolbar button:hover { background: #f0f0f0; }
+        #toolbar button.active { background: #e3f2fd; color: #2196F3; }
+        .sep { width: 1px; height: 24px; background: #ddd; margin: 0 4px; flex-shrink: 0; }
+        
+        /* Iconos levemente más chicos para que quepan todos */
+        .material-symbols-outlined { font-size: 22px; } 
 
         #minimap-container {
-            position: fixed; bottom: 20px; right: 20px; width: 200px; height: 150px;
-            background: rgba(255, 255, 255, 0.9); border: 2px solid #ccc; border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2); z-index: 1000; overflow: hidden;
-            display: none; cursor: crosshair;
+            position: fixed; bottom: 85px; right: 20px; width: 200px; height: 150px;
+            background: rgba(255, 255, 255, 0.95); border: 1px solid #eee; border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15); z-index: 1000; overflow: hidden;
+            display: none; cursor: crosshair; backdrop-filter: blur(5px);
         }
         #minimap { width: 100%; height: 100%; }
-        #minimap-label { position: absolute; top: 5px; left: 5px; font-size: 10px; color: #666; font-weight: bold; background: rgba(255,255,255,0.7); padding: 2px 5px; border-radius: 3px;}
+        #minimap-label { position: absolute; top: 5px; left: 5px; font-size: 10px; color: #555; font-weight: bold; background: rgba(255,255,255,0.8); padding: 3px 6px; border-radius: 4px;}
 
-        /* --- NUEVO: ESTILOS MEJORADOS PARA EL EDITOR DE TEXTO --- */
         #text-editor-overlay {
             position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
             background: rgba(0, 0, 0, 0.6); z-index: 999999;
-            display: flex; justify-content: center; align-items: center; /* Esto lo centra perfecto */
+            display: flex; justify-content: center; align-items: center; 
             backdrop-filter: blur(4px);
         }
         .editor-modal {
@@ -93,7 +122,8 @@
             <button id="btn-redo" title="Rehacer (Ctrl+Y)"><span class="material-symbols-outlined">redo</span></button>
             
             <button id="btn-crop" title="Recortar Imagen/PDF"><span class="material-symbols-outlined">crop</span></button>
-            
+            <div class="sep"></div>
+
             <button id="btn-pan" title="Mover Lienzo"><span class="material-symbols-outlined">pan_tool</span></button>
             <button id="btn-minimap" title="Ver Minimapa"><span class="material-symbols-outlined">map</span></button>
             <div class="sep"></div>
@@ -114,12 +144,12 @@
             <button id="btn-back" title="Enviar al Fondo"><span class="material-symbols-outlined">flip_to_back</span></button>
             <div class="sep"></div>
             
-            <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:28px; height:28px;"> 
-            <div class="slider-box"><input type="range" id="width-slider" min="1" max="25" value="3"></div>
+            <input type="color" id="color-picker" value="#000000" title="Color" style="padding:0; border:none; border-radius:50%; width:26px; height:26px; cursor: pointer;"> 
+            <div class="slider-box" style="width: 70px;"><input type="range" id="width-slider" min="1" max="25" value="3" style="width: 100%;"></div>
             <div class="sep"></div>
             
             <button id="btn-export" title="Exportar JPG"><span class="material-symbols-outlined">photo_camera</span></button>
-            <button id="btn-clear" style="color:#f44336" title="Borrar Todo"><span class="material-symbols-outlined">delete_forever</span></button>
+            <button id="btn-clear" style="color:#e53935" title="Borrar Todo"><span class="material-symbols-outlined">delete_forever</span></button>
         </div>
     </nav>
 
