@@ -24,7 +24,7 @@ socket.on('acceso_permitido', (historial) => {
 socket.on('alguien_quiere_entrar', (data) => {
     const contenedor = document.getElementById('contenedor-notificaciones');
     const toast = document.createElement('div'); toast.className = 'toast';
-    toast.innerHTML = `<span>👤 <b>${data.nombre}</b> quiere entrar.</span><div class="toast-btns"><button class="btn-aceptar">Aceptar</button><button class="btn-rechazar">Rechazar</button></div>`;
+    toast.innerHTML = `<span><span class="material-symbols-outlined" style="margin-right: 8px; color: #2196F3;">person_add</span> <b>${data.nombre}</b> quiere entrar.</span><div class="toast-btns"><button class="btn-aceptar">Permitir</button><button class="btn-rechazar">Ignorar</button></div>`;
     toast.querySelector('.btn-aceptar').onclick = () => { socket.emit('responder_acceso', { guestId: data.guestId, aprobado: true }); toast.remove(); };
     toast.querySelector('.btn-rechazar').onclick = () => { socket.emit('responder_acceso', { guestId: data.guestId, aprobado: false }); toast.remove(); };
     contenedor.appendChild(toast); setTimeout(() => { if(toast.parentNode) toast.remove(); }, 30000);
@@ -79,17 +79,13 @@ function aplicarEstado(snapshotJSON) {
 function undo() { if (historialUndo.length <= 1) return; historialRedo.push(historialUndo.pop()); aplicarEstado(historialUndo[historialUndo.length - 1]); }
 function redo() { if (historialRedo.length === 0) return; const sig = historialRedo.pop(); historialUndo.push(sig); aplicarEstado(sig); }
 
-// --- MEJORA: Modal centrado desde HTML/CSS ---
 function mostrarEditorTexto(valorInicial, callback) {
     const overlay = document.createElement('div'); overlay.id = 'text-editor-overlay'; 
     const modal = document.createElement('div'); modal.className = 'editor-modal';
     const textarea = document.createElement('textarea'); textarea.value = valorInicial; textarea.placeholder = "Escribe aquí...";
     const btn = document.createElement('button'); btn.innerText = "Guardar";
     modal.appendChild(textarea); modal.appendChild(btn); overlay.appendChild(modal); document.body.appendChild(overlay); 
-    
-    // Auto-seleccionar texto si existe
     setTimeout(() => { textarea.focus(); if (valorInicial) textarea.select(); }, 100);
-    
     const finalizar = () => { const texto = textarea.value.trim(); if (texto) callback(texto); document.body.removeChild(overlay); };
     btn.onclick = finalizar; overlay.onclick = (e) => { if(e.target === overlay) finalizar(); };
 }
@@ -180,20 +176,26 @@ const start = e => {
         pedirRender(); return;
     }
 
-    if(m === 'laser') { dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); lasersActivos[miLaserId] = { color: controls.color.value, points: [{x: p.x, y: p.y, t: Date.now()}] }; socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: {x: p.x, y: p.y, t: Date.now()} }); return; }
+    // --- MEJORA: Color Rojo forzado para Láser ---
+    if(m === 'laser') { 
+        dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); 
+        lasersActivos[miLaserId] = { color: "#ff3333", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
+        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: {x: p.x, y: p.y, t: Date.now()} }); 
+        return; 
+    }
     
-    // --- MEJORA: Color Amarillo Forzado para Sticky Notes (#ffeb3b) ---
+    // --- MEJORA: Color Amarillo Pastel forzado para Sticky Notes ---
     if(m === 'sticky') { 
         mostrarEditorTexto("", (t) => { 
-            const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: "#ffeb3b", w: 200, h: 200, grosor: 1 }; 
+            const obj = { id: Math.random(), type:'sticky', x: p.x, y: p.y, text: t, color: "#fff9c4", w: 200, h: 200, grosor: 1 }; 
             elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); 
         }); 
         return; 
     }
+    
     if(m === 'text') { mostrarEditorTexto("", (t) => { const obj = { type:'text', x: p.x, y: p.y, text: t, color: controls.color.value, w: 120, h: 30, grosor: 2 }; elementos.push(obj); socket.emit('dibujar', obj); guardarEstado(); pedirRender(); }); return; }
 
     dibujando = true; 
-    // NUEVO: Modo Recorte usa color azul transparente temporal
     const col = m === 'crop' ? 'rgba(33, 150, 243, 0.3)' : controls.color.value;
     elementoActual = { id: Math.random(), type: m, x: p.x, y: p.y, w: 0, h: 0, color: col, grosor: parseInt(controls.grosor.value), points: [{x:p.x, y:p.y}] }; 
     pedirRender(); 
@@ -213,7 +215,8 @@ const move = e => {
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
     if(m === 'erase' && dibujando) { borrarEn(p); return; }
 
-    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: controls.color.value, pt: pt }); return; }
+    // El Láser transmite en rojo (#ff3333)
+    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: pt }); return; }
     if(dibujando && elementoActual) { if(m === 'pen') elementoActual.points.push({x: p.x, y: p.y}); else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; } pedirRender(); }
     
     if(m === 'select') {
@@ -247,15 +250,12 @@ const end = e => {
         boxSeleccion = null;
     }
     
-    // --- NUEVO: LÓGICA DE RECORTAR ---
     if (dibujando && modo === 'crop' && elementoActual) {
-        // Normalizamos coordenadas (por si dibujaron de derecha a izquierda)
         const cropX = elementoActual.w < 0 ? elementoActual.x + elementoActual.w : elementoActual.x;
         const cropY = elementoActual.h < 0 ? elementoActual.y + elementoActual.h : elementoActual.y;
         const cropW = Math.abs(elementoActual.w);
         const cropH = Math.abs(elementoActual.h);
 
-        // Buscamos si hay alguna imagen DEBAJO de esta selección
         const imgParaRecortarIndex = elementos.findLastIndex(el => 
             el.type === 'image' && 
             cropX >= el.x && cropY >= el.y && 
@@ -264,13 +264,10 @@ const end = e => {
 
         if (imgParaRecortarIndex !== -1 && cropW > 10 && cropH > 10) {
             const imgOriginal = elementos[imgParaRecortarIndex];
-            
-            // Creamos un canvas temporal solo con el pedacito que queremos
             const tCanvas = document.createElement('canvas');
             tCanvas.width = cropW; tCanvas.height = cropH;
             const tCtx = tCanvas.getContext('2d');
             
-            // Calculamos cuánto escalar según la resolución original de la imagen
             const imgEl = imgOriginal.imgObj;
             const scaleX = imgEl.width / imgOriginal.w;
             const scaleY = imgEl.height / imgOriginal.h;
@@ -288,21 +285,14 @@ const end = e => {
             
             newImg.onload = () => {
                 const nuevoEl = { id: Math.random(), type:'image', x: cropX, y: cropY, w: cropW, h: cropH, src: newSrc, grosor: 1, imgObj: newImg };
-                
-                // Borramos la imagen vieja e insertamos la nueva
                 elementos.splice(imgParaRecortarIndex, 1);
                 elementos.push(nuevoEl);
-                
                 socket.emit('sync_todo', elementos);
                 guardarEstado();
                 pedirRender();
             };
         }
-        
-        dibujando = false;
-        elementoActual = null;
-        pedirRender();
-        return; // Salimos para que el recuadro azul de recorte no se guarde en la pizarra
+        dibujando = false; elementoActual = null; pedirRender(); return; 
     }
 
     if(dibujando && elementoActual && modo !== 'crop') { elementos.push(elementoActual); socket.emit('dibujar', elementoActual); guardarEstado(); } 
@@ -338,16 +328,9 @@ function exportarJPG() {
 function helperDibujarElemento(c, el, z) {
     c.strokeStyle = el.color; c.fillStyle = el.color; c.lineWidth = el.grosor; c.lineCap = "round"; c.lineJoin = "round";
     
-    // Si estamos en modo crop y dibujando el rectangulo, lo hacemos distinto (azul transparente)
     if(el.type === 'crop') {
-        c.fillStyle = el.color; // Ya viene con el rgba transparente de arriba
-        c.strokeStyle = "#2196F3";
-        c.lineWidth = 2 / z;
-        c.setLineDash([5/z, 5/z]);
-        c.fillRect(el.x, el.y, el.w, el.h);
-        c.strokeRect(el.x, el.y, el.w, el.h);
-        c.setLineDash([]);
-        return;
+        c.fillStyle = el.color; c.strokeStyle = "#2196F3"; c.lineWidth = 2 / z; c.setLineDash([5/z, 5/z]);
+        c.fillRect(el.x, el.y, el.w, el.h); c.strokeRect(el.x, el.y, el.w, el.h); c.setLineDash([]); return;
     }
 
     if(el.type==='pen'){ if (el.points.length === 1) { c.beginPath(); c.arc(el.points[0].x, el.points[0].y, el.grosor / 2, 0, Math.PI * 2); c.fill(); } else { c.beginPath(); el.points.forEach((p,i)=>i===0?c.moveTo(p.x,p.y):c.lineTo(p.x,p.y)); c.stroke(); } }
