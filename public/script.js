@@ -37,9 +37,11 @@ canvas.width = window.innerWidth; canvas.height = window.innerHeight;
 
 const miniCanvas = document.getElementById('minimap');
 const mCtx = miniCanvas.getContext('2d');
-let verMinimapa = false;
 
-// Carga Segura de la Librería PDF
+// --- VARIABLES DE ESTADO PARA PANELES FLOTANTES ---
+let verMinimapa = false;
+let verUsuarios = true; // Encendido por defecto
+
 let pdfjsLib;
 try {
     if (window['pdfjs-dist/build/pdf']) {
@@ -50,7 +52,6 @@ try {
     console.error("La librería PDF no pudo inicializarse correctamente.", e);
 }
 
-// Por defecto inicia en 'select'
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 let historialUndo = [], historialRedo = [], historialCargado = false, cambioRealizado = false;
@@ -121,22 +122,39 @@ function enviarAlFondo() { if (seleccionados.length === 0) return; elementos = e
 document.querySelectorAll('#toolbar button[id^="btn-"]').forEach(btn => {
     btn.onclick = () => {
         const id = btn.id;
-        if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home', 'btn-minimap'].includes(id)) {
-            if(id==='btn-export') exportarJPG(); if(id==='btn-clear') reiniciarLienzo();
-            if(id==='btn-undo') undo(); if(id==='btn-redo') redo(); if(id==='btn-front') traerAlFrente(); if(id==='btn-back') enviarAlFondo();
+        
+        // Botones de acción instantánea o de encendido/apagado
+        if(['btn-export', 'btn-clear', 'btn-undo', 'btn-redo', 'btn-front', 'btn-back', 'btn-home', 'btn-minimap', 'btn-users'].includes(id)) {
+            if(id==='btn-export') exportarJPG(); 
+            if(id==='btn-clear') reiniciarLienzo();
+            if(id==='btn-undo') undo(); 
+            if(id==='btn-redo') redo(); 
+            if(id==='btn-front') traerAlFrente(); 
+            if(id==='btn-back') enviarAlFondo();
             if(id==='btn-home') window.location.href = 'index.html'; 
+            
             if(id==='btn-minimap') {
                 verMinimapa = !verMinimapa;
                 document.getElementById('minimap-container').style.display = verMinimapa ? 'block' : 'none';
-                if(verMinimapa) pedirRender();
+                if(verMinimapa) { pedirRender(); btn.classList.add('active'); } else { btn.classList.remove('active'); }
+            }
+            if(id==='btn-users') {
+                verUsuarios = !verUsuarios;
+                document.getElementById('user-list-container').style.display = verUsuarios ? 'block' : 'none';
+                if(verUsuarios) btn.classList.add('active'); else btn.classList.remove('active');
             }
             return;
         }
+
         if(id === 'btn-image') { subirImagen(); return; }
         if(id === 'btn-pdf') { subirPDF(); return; } 
         
-        document.querySelectorAll('#toolbar button:not(#btn-minimap)').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active'); modo = id.replace('btn-', ''); seleccionados = []; pedirRender();
+        // Quita la clase 'active' a todos MENOS a minimap y users
+        document.querySelectorAll('#toolbar button:not(#btn-minimap):not(#btn-users)').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active'); 
+        modo = id.replace('btn-', ''); 
+        seleccionados = []; 
+        pedirRender();
     };
 });
 
@@ -188,8 +206,8 @@ const start = e => {
 
     if(m === 'laser') { 
         dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); 
-        lasersActivos[miLaserId] = { color: "#ff0000", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
-        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff0000", pt: {x: p.x, y: p.y, t: Date.now()} }); 
+        lasersActivos[miLaserId] = { color: "#ff3333", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
+        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: {x: p.x, y: p.y, t: Date.now()} }); 
         return; 
     }
     
@@ -223,7 +241,7 @@ const move = e => {
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
     if(m === 'erase' && dibujando) { borrarEn(p); return; }
 
-    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff0000", pt: pt }); return; }
+    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: pt }); return; }
     if(dibujando && elementoActual) { if(m === 'pen') elementoActual.points.push({x: p.x, y: p.y}); else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; } pedirRender(); }
     
     if(m === 'select') {
