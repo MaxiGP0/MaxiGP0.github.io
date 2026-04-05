@@ -8,7 +8,6 @@
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; display: flex; height: 100vh; overflow: hidden; }
         
-        /* NUEVO: Capa oscura para cuando el menú está abierto en celular */
         .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99; opacity: 0; transition: opacity 0.3s; }
         .sidebar-overlay.open { display: block; opacity: 1; }
 
@@ -22,7 +21,6 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; flex-wrap: wrap; gap: 20px;}
         h1 { margin: 0; font-size: 28px; color: #111; display: flex; align-items: center; gap: 10px;}
         
-        /* Botón hamburguesa oculto en PC */
         .menu-toggle { display: none; background: transparent; border: none; padding: 0; cursor: pointer; color: #333; margin-right: 15px; }
 
         .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
@@ -49,7 +47,9 @@
         
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
 
-        /* NUEVO: Diseño responsivo real para celulares */
+        /* Botón de cerrar sesión del menú (Oculto por defecto en PC) */
+        .btn-logout-sidebar { display: none; }
+
         @media (max-width: 768px) {
             body { flex-direction: column; overflow: auto; }
             .menu-toggle { display: flex; align-items: center; justify-content: center; }
@@ -58,12 +58,22 @@
             .header-actions { width: 100%; margin-top: 10px; justify-content: space-between; }
             .main-content { padding: 20px; }
             
-            /* El menú lateral se esconde fuera de la pantalla */
             .sidebar { 
                 position: fixed; top: 0; left: -280px; width: 250px; height: 100vh; 
-                box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+                box-shadow: 5px 0 15px rgba(0,0,0,0.1); padding: 0; 
             }
-            .sidebar.open { left: 0; } /* Se desliza al abrir */
+            .sidebar.open { left: 0; } 
+
+            /* Ocultar el botón de cerrar sesión de arriba */
+            .header-actions .btn-logout { display: none; }
+
+            /* Mostrar el botón de cerrar sesión en la hamburguesa (abajo de todo) */
+            .btn-logout-sidebar { 
+                display: flex; align-items: center; gap: 10px; width: 100%;
+                background: transparent; border: none; padding: 20px; border-top: 1px solid #eaeaea;
+                cursor: pointer; font-weight: bold; color: #d32f2f; transition: 0.2s; font-size: 16px; margin-top: auto;
+            }
+            .btn-logout-sidebar:hover { background: #ffebee; }
         }
     </style>
 </head>
@@ -72,10 +82,16 @@
     <div class="sidebar-overlay" onclick="toggleMenu()"></div>
 
     <div class="sidebar">
-        <div style="font-size: 30px; margin-bottom: 30px; font-weight: bold; color:#111;">🎨 Cuaderno</div>
-        <h2><span class="material-symbols-outlined">folder</span> Carpetas</h2>
-        <div id="folder-list">
-            </div>
+        <div style="flex: 1; overflow-y: auto; padding: 20px;">
+            <div style="font-size: 30px; margin-bottom: 30px; font-weight: bold; color:#111;">🎨 Cuaderno</div>
+            <h2><span class="material-symbols-outlined">folder</span> Carpetas</h2>
+            <div id="folder-list">
+                </div>
+        </div>
+        
+        <button onclick="cerrarSesion()" class="btn-logout-sidebar">
+            <span class="material-symbols-outlined">logout</span> Cerrar Sesión
+        </button>
     </div>
 
     <div class="main-content">
@@ -107,7 +123,6 @@
         let todosLosProyectos = [];
         let carpetaActual = 'Todas';
 
-        // Lógica para abrir/cerrar el menú lateral en celular
         function toggleMenu() {
             document.querySelector('.sidebar').classList.toggle('open');
             document.querySelector('.sidebar-overlay').classList.toggle('open');
@@ -162,7 +177,6 @@
                     carpetaActual = c; 
                     renderizarCarpetas(); 
                     renderizarProyectos(); 
-                    // Auto-cerrar el menú en celular al elegir carpeta
                     if(window.innerWidth <= 768) toggleMenu(); 
                 };
                 list.appendChild(div);
