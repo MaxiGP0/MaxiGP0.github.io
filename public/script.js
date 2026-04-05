@@ -50,7 +50,7 @@ try {
     console.error("La librería PDF no pudo inicializarse correctamente.", e);
 }
 
-// Vuelve a ser 'select' por defecto
+// Por defecto inicia en 'select'
 let modo = 'select', elementos = [], dibujando = false, elementoActual = null;
 let camera = { x: 0, y: 0, z: 1 }, isPanning = false, startPan = { x: 0, y: 0 };
 let historialUndo = [], historialRedo = [], historialCargado = false, cambioRealizado = false;
@@ -188,8 +188,8 @@ const start = e => {
 
     if(m === 'laser') { 
         dibujando = true; miLaserId = Math.random().toString(36).substr(2,9); 
-        lasersActivos[miLaserId] = { color: "#ff3333", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
-        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: {x: p.x, y: p.y, t: Date.now()} }); 
+        lasersActivos[miLaserId] = { color: "#ff0000", points: [{x: p.x, y: p.y, t: Date.now()}] }; 
+        socket.emit('dibujar_laser', { id: miLaserId, color: "#ff0000", pt: {x: p.x, y: p.y, t: Date.now()} }); 
         return; 
     }
     
@@ -223,7 +223,7 @@ const move = e => {
     if(isPanning) { camera.x = p.rx - startPan.x; camera.y = p.ry - startPan.y; pedirRender(); return; }
     if(m === 'erase' && dibujando) { borrarEn(p); return; }
 
-    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff3333", pt: pt }); return; }
+    if (m === 'laser' && dibujando) { const pt = {x: p.x, y: p.y, t: Date.now()}; lasersActivos[miLaserId].points.push(pt); socket.emit('dibujar_laser', { id: miLaserId, color: "#ff0000", pt: pt }); return; }
     if(dibujando && elementoActual) { if(m === 'pen') elementoActual.points.push({x: p.x, y: p.y}); else { elementoActual.w = p.x - elementoActual.x; elementoActual.h = p.y - elementoActual.y; } pedirRender(); }
     
     if(m === 'select') {
