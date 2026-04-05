@@ -128,10 +128,13 @@
             document.querySelector('.sidebar-overlay').classList.toggle('open');
         }
 
+        // NUEVO: Agregamos la confirmación antes de cerrar sesión
         function cerrarSesion() {
-            localStorage.removeItem('token_cuaderno');
-            localStorage.removeItem('nombre_usuario');
-            window.location.href = 'login.html';
+            if (confirm("¿Estás seguro de que quieres cerrar sesión?")) {
+                localStorage.removeItem('token_cuaderno');
+                localStorage.removeItem('nombre_usuario');
+                window.location.href = 'login.html';
+            }
         }
 
         function crearNuevoProyecto() { window.location.href = `pizarra.html?sala=${Math.random().toString(36).substr(2, 6)}`; }
