@@ -8,8 +8,11 @@
     <style>
         body { font-family: -apple-system, sans-serif; background-color: #f4f7f6; margin: 0; padding: 0; color: #333; display: flex; height: 100vh; overflow: hidden; }
         
-        /* NUEVO: Barra lateral para carpetas */
-        .sidebar { width: 250px; background: white; border-right: 1px solid #eaeaea; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; }
+        /* NUEVO: Capa oscura para cuando el menú está abierto en celular */
+        .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 99; opacity: 0; transition: opacity 0.3s; }
+        .sidebar-overlay.open { display: block; opacity: 1; }
+
+        .sidebar { width: 250px; background: white; border-right: 1px solid #eaeaea; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; z-index: 100; transition: left 0.3s ease; }
         .sidebar h2 { font-size: 16px; color: #888; text-transform: uppercase; margin-bottom: 15px; display: flex; align-items: center; gap: 5px; }
         .folder-item { padding: 10px 15px; border-radius: 8px; cursor: pointer; display: flex; align-items: center; gap: 10px; margin-bottom: 5px; transition: 0.2s; font-weight: 500; color: #555; }
         .folder-item:hover { background: #f0f0f0; }
@@ -19,6 +22,9 @@
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px; flex-wrap: wrap; gap: 20px;}
         h1 { margin: 0; font-size: 28px; color: #111; display: flex; align-items: center; gap: 10px;}
         
+        /* Botón hamburguesa oculto en PC */
+        .menu-toggle { display: none; background: transparent; border: none; padding: 0; cursor: pointer; color: #333; margin-right: 15px; }
+
         .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
         .btn-nuevo { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); display: flex; align-items: center; gap: 5px;}
         .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;}
@@ -36,7 +42,6 @@
         .card-folder { font-size: 12px; color: #2196F3; font-weight: bold; text-transform: uppercase; margin-bottom: 5px;}
         .card-date { font-size: 13px; color: #888; margin: 0; }
         
-        /* Menú de opciones de la tarjeta */
         .card-actions { position: absolute; top: 15px; right: 15px; display: flex; flex-direction: column; gap: 5px; }
         .btn-action { background: #f0f0f0; border: none; border-radius: 50%; width: 35px; height: 35px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #555; }
         .btn-action:hover { background: #ddd; transform: scale(1.1); }
@@ -44,14 +49,27 @@
         
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
 
+        /* NUEVO: Diseño responsivo real para celulares */
         @media (max-width: 768px) {
             body { flex-direction: column; overflow: auto; }
-            .sidebar { width: auto; border-right: none; border-bottom: 1px solid #eaeaea; padding: 10px; flex-direction: row; overflow-x: auto; white-space: nowrap; }
-            .folder-item { margin-bottom: 0; margin-right: 10px; }
+            .menu-toggle { display: flex; align-items: center; justify-content: center; }
+            .header { justify-content: flex-start; }
+            .header h1 { font-size: 22px; }
+            .header-actions { width: 100%; margin-top: 10px; justify-content: space-between; }
+            .main-content { padding: 20px; }
+            
+            /* El menú lateral se esconde fuera de la pantalla */
+            .sidebar { 
+                position: fixed; top: 0; left: -280px; width: 250px; height: 100vh; 
+                box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+            }
+            .sidebar.open { left: 0; } /* Se desliza al abrir */
         }
     </style>
 </head>
 <body>
+
+    <div class="sidebar-overlay" onclick="toggleMenu()"></div>
 
     <div class="sidebar">
         <div style="font-size: 30px; margin-bottom: 30px; font-weight: bold; color:#111;">🎨 Cuaderno</div>
@@ -62,7 +80,13 @@
 
     <div class="main-content">
         <div class="header">
-            <h1><span class="material-symbols-outlined" style="font-size: 32px; color: #4caf50;">waving_hand</span> Hola, <span id="nombre-usuario"></span></h1>
+            <div style="display: flex; align-items: center;">
+                <button class="menu-toggle" onclick="toggleMenu()">
+                    <span class="material-symbols-outlined" style="font-size: 30px;">menu</span>
+                </button>
+                <h1><span class="material-symbols-outlined" style="font-size: 32px; color: #4caf50;">waving_hand</span> Hola, <span id="nombre-usuario"></span></h1>
+            </div>
+            
             <div class="header-actions">
                 <div class="join-box">
                     <input type="text" id="input-codigo" placeholder="Código">
@@ -82,6 +106,12 @@
 
         let todosLosProyectos = [];
         let carpetaActual = 'Todas';
+
+        // Lógica para abrir/cerrar el menú lateral en celular
+        function toggleMenu() {
+            document.querySelector('.sidebar').classList.toggle('open');
+            document.querySelector('.sidebar-overlay').classList.toggle('open');
+        }
 
         function cerrarSesion() {
             localStorage.removeItem('token_cuaderno');
@@ -103,7 +133,7 @@
 
         async function moverCarpeta(event, idSala, carpetaActual) {
             event.preventDefault(); event.stopPropagation(); 
-            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Algebra, Principal):", carpetaActual || 'Principal');
+            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Álgebra, Arch Linux, General):", carpetaActual || 'Principal');
             if (nuevaCarpeta && nuevaCarpeta.trim() !== "") {
                 await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ carpeta: nuevaCarpeta.trim() }) });
                 cargarProyectos();
@@ -119,10 +149,8 @@
         }
 
         function renderizarCarpetas() {
-            // Extraer carpetas únicas
             const carpetasSet = new Set(todosLosProyectos.map(p => p.carpeta || 'Principal'));
             const carpetas = ['Todas', ...Array.from(carpetasSet).sort()];
-            
             const list = document.getElementById('folder-list');
             list.innerHTML = '';
             
@@ -130,7 +158,13 @@
                 const div = document.createElement('div');
                 div.className = `folder-item ${c === carpetaActual ? 'active' : ''}`;
                 div.innerHTML = `<span class="material-symbols-outlined" style="font-size:20px;">${c==='Todas'?'dashboard':'folder'}</span> ${c}`;
-                div.onclick = () => { carpetaActual = c; renderizarCarpetas(); renderizarProyectos(); };
+                div.onclick = () => { 
+                    carpetaActual = c; 
+                    renderizarCarpetas(); 
+                    renderizarProyectos(); 
+                    // Auto-cerrar el menú en celular al elegir carpeta
+                    if(window.innerWidth <= 768) toggleMenu(); 
+                };
                 list.appendChild(div);
             });
         }
@@ -138,7 +172,6 @@
         function renderizarProyectos() {
             const grid = document.getElementById('project-grid');
             grid.innerHTML = '';
-
             const filtrados = carpetaActual === 'Todas' ? todosLosProyectos : todosLosProyectos.filter(p => (p.carpeta || 'Principal') === carpetaActual);
 
             if (filtrados.length === 0) return grid.innerHTML = `<div class="empty-state">No hay proyectos aquí.</div>`;
