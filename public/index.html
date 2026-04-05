@@ -25,7 +25,6 @@
 
         .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;}
         .btn-nuevo { background: #4caf50; color: white; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(76, 175, 80, 0.3); display: flex; align-items: center; gap: 5px;}
-        .btn-logout { background: #e0e0e0; color: #333; border: none; padding: 10px 20px; border-radius: 30px; font-weight: bold; cursor: pointer; display: flex; align-items: center; gap: 5px;}
         
         .join-box { display: flex; background: white; border-radius: 30px; overflow: hidden; border: 1px solid #ccc; }
         .join-box input { border: none; padding: 10px 15px; outline: none; font-size: 14px; width: 120px; }
@@ -47,8 +46,15 @@
         
         .empty-state { text-align: center; padding: 50px; color: #888; grid-column: 1 / -1; }
 
-        /* Botón de cerrar sesión del menú (Oculto por defecto en PC) */
-        .btn-logout-sidebar { display: none; }
+        .btn-sidebar-option { display: none; }
+
+        /* NUEVO: Estilos para el Modal de Contraseña */
+        #modal-password { display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.6); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+        .modal-box { background: white; padding: 25px; border-radius: 16px; width: 90%; max-width: 350px; display: flex; flex-direction: column; gap: 15px; box-shadow: 0 15px 35px rgba(0,0,0,0.2); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+        .modal-box input { padding: 12px; border: 2px solid #eee; border-radius: 8px; font-size: 15px; outline: none; transition: 0.2s; }
+        .modal-box input:focus { border-color: #2196F3; }
+        .modal-box button { padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 15px; flex: 1; }
 
         @media (max-width: 768px) {
             body { flex-direction: column; overflow: auto; }
@@ -58,22 +64,17 @@
             .header-actions { width: 100%; margin-top: 10px; justify-content: space-between; }
             .main-content { padding: 20px; }
             
-            .sidebar { 
-                position: fixed; top: 0; left: -280px; width: 250px; height: 100vh; 
-                box-shadow: 5px 0 15px rgba(0,0,0,0.1); padding: 0; 
-            }
+            .sidebar { position: fixed; top: 0; left: -280px; width: 250px; height: 100vh; box-shadow: 5px 0 15px rgba(0,0,0,0.1); padding: 0; }
             .sidebar.open { left: 0; } 
 
-            /* Ocultar el botón de cerrar sesión de arriba */
-            .header-actions .btn-logout { display: none; }
+            .header-actions .btn-logout, .header-actions .btn-settings { display: none; }
 
-            /* Mostrar el botón de cerrar sesión en la hamburguesa (abajo de todo) */
-            .btn-logout-sidebar { 
+            .btn-sidebar-option { 
                 display: flex; align-items: center; gap: 10px; width: 100%;
-                background: transparent; border: none; padding: 20px; border-top: 1px solid #eaeaea;
-                cursor: pointer; font-weight: bold; color: #d32f2f; transition: 0.2s; font-size: 16px; margin-top: auto;
+                background: transparent; border: none; padding: 15px 20px;
+                cursor: pointer; font-weight: bold; transition: 0.2s; font-size: 16px;
             }
-            .btn-logout-sidebar:hover { background: #ffebee; }
+            .btn-sidebar-option:hover { background: #f0f0f0; }
         }
     </style>
 </head>
@@ -89,9 +90,26 @@
                 </div>
         </div>
         
-        <button onclick="cerrarSesion()" class="btn-logout-sidebar">
-            <span class="material-symbols-outlined">logout</span> Cerrar Sesión
-        </button>
+        <div style="border-top: 1px solid #eaeaea;">
+            <button onclick="abrirModalPassword()" class="btn-sidebar-option" style="color: #555;">
+                <span class="material-symbols-outlined">key</span> Cambiar Contraseña
+            </button>
+            <button onclick="cerrarSesion()" class="btn-sidebar-option" style="color: #d32f2f;">
+                <span class="material-symbols-outlined">logout</span> Cerrar Sesión
+            </button>
+        </div>
+    </div>
+
+    <div id="modal-password">
+        <div class="modal-box">
+            <h3 style="margin: 0; color: #111;">Cambiar Contraseña</h3>
+            <input type="password" id="pass-actual" placeholder="Contraseña actual">
+            <input type="password" id="pass-nueva" placeholder="Nueva contraseña">
+            <div style="display: flex; gap: 10px; margin-top: 5px;">
+                <button onclick="cerrarModalPassword()" style="background: #e0e0e0; color: #333;">Cancelar</button>
+                <button onclick="guardarNuevaPassword()" id="btn-save-pass" style="background: #2196F3; color: white;">Guardar</button>
+            </div>
+        </div>
     </div>
 
     <div class="main-content">
@@ -109,7 +127,9 @@
                     <button onclick="unirsePorCodigo()">Unirse</button>
                 </div>
                 <button class="btn-nuevo" onclick="crearNuevoProyecto()"><span class="material-symbols-outlined" style="font-size: 18px;">add</span> Nuevo</button>
-                <button class="btn-logout" onclick="cerrarSesion()"><span class="material-symbols-outlined" style="font-size: 18px;">logout</span></button>
+                
+                <button class="btn-action btn-settings" onclick="abrirModalPassword()" title="Cambiar Contraseña" style="background: #e0e0e0; border-radius: 30px; padding: 10px 15px; width: auto; height: auto; font-weight: bold;"><span class="material-symbols-outlined" style="font-size: 18px;">key</span></button>
+                <button class="btn-logout" onclick="cerrarSesion()" title="Cerrar Sesión" style="background: #e0e0e0; border-radius: 30px; padding: 10px 15px; height: auto;"><span class="material-symbols-outlined" style="font-size: 18px; color: #d32f2f;">logout</span></button>
             </div>
         </div>
         <div class="grid" id="project-grid"><p style="text-align: center; color: #888;">Cargando...</p></div>
@@ -128,13 +148,55 @@
             document.querySelector('.sidebar-overlay').classList.toggle('open');
         }
 
-        // NUEVO: Agregamos la confirmación antes de cerrar sesión
         function cerrarSesion() {
             if (confirm("¿Estás seguro de que quieres cerrar sesión?")) {
                 localStorage.removeItem('token_cuaderno');
                 localStorage.removeItem('nombre_usuario');
                 window.location.href = 'login.html';
             }
+        }
+
+        // --- NUEVO: Lógica de Cambio de Contraseña ---
+        function abrirModalPassword() {
+            document.getElementById('pass-actual').value = '';
+            document.getElementById('pass-nueva').value = '';
+            document.getElementById('modal-password').style.display = 'flex';
+            if(window.innerWidth <= 768) toggleMenu(); // Cierra la hamburguesa si está en celular
+        }
+
+        function cerrarModalPassword() {
+            document.getElementById('modal-password').style.display = 'none';
+        }
+
+        async function guardarNuevaPassword() {
+            const actual = document.getElementById('pass-actual').value;
+            const nueva = document.getElementById('pass-nueva').value;
+            
+            if (!actual || !nueva) return alert("Por favor completa ambos campos.");
+            if (nueva.length < 6) return alert("La nueva contraseña debe tener al menos 6 caracteres.");
+
+            const btn = document.getElementById('btn-save-pass');
+            btn.innerText = "Guardando..."; btn.disabled = true;
+
+            try {
+                const respuesta = await fetch('/api/auth/cambiar-password', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ actual, nueva })
+                });
+                
+                const data = await respuesta.json();
+                
+                if (respuesta.ok) {
+                    alert("¡Contraseña actualizada con éxito!");
+                    cerrarModalPassword();
+                } else {
+                    alert(data.error || "Error al actualizar contraseña.");
+                }
+            } catch (error) {
+                alert("Error de conexión.");
+            }
+            btn.innerText = "Guardar"; btn.disabled = false;
         }
 
         function crearNuevoProyecto() { window.location.href = `pizarra.html?sala=${Math.random().toString(36).substr(2, 6)}`; }
@@ -151,7 +213,7 @@
 
         async function moverCarpeta(event, idSala, carpetaActual) {
             event.preventDefault(); event.stopPropagation(); 
-            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Principal, Importante):", carpetaActual || 'Principal');
+            const nuevaCarpeta = prompt("Mover a la carpeta (ej. Álgebra, Arch Linux, General):", carpetaActual || 'Principal');
             if (nuevaCarpeta && nuevaCarpeta.trim() !== "") {
                 await fetch(`/api/proyectos/${idSala}`, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }, body: JSON.stringify({ carpeta: nuevaCarpeta.trim() }) });
                 cargarProyectos();
