@@ -101,7 +101,7 @@ Clonar el repositorio:
 
 git clone https://github.com/MaxiGP0/MaxiGP0.github.io
 
-cd cuaderno-pro
+cd MaxiGP0.github.io
 
 
 
