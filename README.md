@@ -42,9 +42,13 @@ Vanilla JavaScript (ES6+).
 PDF.js (Renderizado de documentos).
 
 Backend:
+
 Node.js & Express.js (Servidor y API REST).
+
 Socket.io (Comunicación bidireccional y sincronización de eventos).
+
 MongoDB & Mongoose (Persistencia de datos y usuarios).
+
 JWT & Bcrypt.js (Seguridad).
 
 
