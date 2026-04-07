@@ -99,7 +99,7 @@ Sigue estos pasos para correr el proyecto en tu propia computadora:
 Clonar el repositorio:
 
 
-git clone https://github.com/TU_USUARIO/cuaderno-pro.git
+git clone https://github.com/MaxiGP0/MaxiGP0.github.io
 
 cd cuaderno-pro
 
