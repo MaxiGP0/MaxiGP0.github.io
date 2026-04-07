@@ -134,7 +134,6 @@ Abrir http://localhost:3000 en tu navegador web.
 
 📂 Estructura del Proyecto
 
-Plaintext
 
 cuaderno-pro/
 
