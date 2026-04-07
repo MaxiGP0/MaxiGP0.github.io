@@ -2,6 +2,13 @@
 Cuaderno Pro es una plataforma web de pizarra digital interactiva diseñada para el estudio grupal, la diagramación y la colaboración en tiempo real.
 Permite a múltiples usuarios interactuar en un mismo lienzo infinito, importar documentos, y organizar sus proyectos en la nube.
 
+
+Se puede probar en:
+
+https://cuaderno-digital-pben.onrender.com/
+
+
+
 ✨ Características Principales ----------------------------------------------------------------
 
 
