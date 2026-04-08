@@ -5,7 +5,7 @@ Permite a múltiples usuarios interactuar en un mismo lienzo infinito, importar 
 
 Se puede probar en:
 
-https://cuaderno-digital-pben.onrender.com/
+https://cuaderno-digital-1.onrender.com
 
 
 
@@ -106,9 +106,9 @@ Sigue estos pasos para correr el proyecto en tu propia computadora:
 Clonar el repositorio:
 
 
-git clone https://github.com/MaxiGP0/MaxiGP0.github.io
+git clone https://github.com/MaxiGP0/cuaderno-digital
 
-cd MaxiGP0.github.io
+cd cuaderno-digital
 
 
 
@@ -142,7 +142,7 @@ Abrir http://localhost:3000 en tu navegador web.
 📂 Estructura del Proyecto
 
 
-cuaderno-pro/
+cuaderno-digital/
 
 ├── public/                 # Archivos estáticos del Frontend
 
