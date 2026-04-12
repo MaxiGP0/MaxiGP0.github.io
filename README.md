@@ -1,4 +1,5 @@
 🎨 Cuaderno Pro - Pizarra Digital Colaborativa
+
 Cuaderno Pro es una plataforma web de pizarra digital interactiva diseñada para el estudio grupal, la diagramación y la colaboración en tiempo real.
 Permite a múltiples usuarios interactuar en un mismo lienzo infinito, importar documentos, y organizar sus proyectos en la nube.
 
@@ -14,88 +15,88 @@ https://cuaderno-digital-1.onrender.com
 
 🤝 Colaboración en Tiempo Real
 
-Multijugador fluido: Dibuja, escribe y mueve elementos viendo los cursores y nombres de otros usuarios en vivo (vía WebSockets).
+- Multijugador fluido: Dibuja, escribe y mueve elementos viendo los cursores y nombres de otros usuarios en vivo (vía WebSockets).
 
-Control de Acceso: Sistema de permisos donde el creador de la sala debe aprobar la entrada de los invitados (Notificaciones UI estilo Toast).
+- Control de Acceso: Sistema de permisos donde el creador de la sala debe aprobar la entrada de los invitados (Notificaciones UI estilo Toast).
 
-Bifurcación de Salas (Fork): Los invitados pueden clonar y guardar una copia exacta de la pizarra del anfitrión en sus propias cuentas antes de salir.
+- Bifurcación de Salas (Fork): Los invitados pueden clonar y guardar una copia exacta de la pizarra del anfitrión en sus propias cuentas antes de salir.
 
 
 
 🛠️ Herramientas de Edición Avanzadas
 
-Lápiz y Goma: Trazos a mano alzada con grosor y color dinámico.
+- Lápiz y Goma: Trazos a mano alzada con grosor y color dinámico.
 
-Formas Geométricas: Líneas, flechas, rectángulos, círculos, rombos, triángulos y estrellas.
+- Formas Geométricas: Líneas, flechas, rectángulos, círculos, rombos, triángulos y estrellas.
 
-Puntero Láser: Rastro efímero de color rojo neón para señalar elementos durante una explicación sin manchar el lienzo.
+- Puntero Láser: Rastro efímero de color rojo neón para señalar elementos durante una explicación sin manchar el lienzo.
 
-Notas Adhesivas (Sticky Notes): Cajas de texto con estilo post-it color amarillo pastel.
+- Notas Adhesivas (Sticky Notes): Cajas de texto con estilo post-it color amarillo pastel.
 
-Sistema de Capas: Opciones para traer elementos al frente o enviarlos al fondo.
+- Sistema de Capas: Opciones para traer elementos al frente o enviarlos al fondo.
 
-Historial de Estados: Funciones completas de Deshacer (Undo) y Rehacer (Redo).
+- Historial de Estados: Funciones completas de Deshacer (Undo) y Rehacer (Redo).
 
-Portapapeles: Copiar y pegar elementos rápidamente con atajos de teclado (Ctrl+C / Ctrl+V).
+- Portapapeles: Copiar y pegar elementos rápidamente con atajos de teclado (Ctrl+C / Ctrl+V).
 
 
 
 
 📄 Manejo de Medios y Documentos
 
-Soporte Nativo para PDFs: Integración con Mozilla pdf.js para renderizar documentos multipágina directamente en el lienzo con alta resolución.
+- Soporte Nativo para PDFs: Integración con Mozilla pdf.js para renderizar documentos multipágina directamente en el lienzo con alta resolución.
 
-Gestión de Imágenes: Subida de imágenes locales con auto-redimensionado para optimizar el rendimiento.
+- Gestión de Imágenes: Subida de imágenes locales con auto-redimensionado para optimizar el rendimiento.
 
-Herramienta de Recorte (Crop): Dibuja un área sobre cualquier imagen o PDF para recortarlo de forma destructiva y mantener solo la información necesaria.
+- Herramienta de Recorte (Crop): Dibuja un área sobre cualquier imagen o PDF para recortarlo de forma destructiva y mantener solo la información necesaria.
 
-Exportación: Guarda el estado actual de la pizarra como una imagen .JPG de alta calidad.
+- Exportación: Guarda el estado actual de la pizarra como una imagen .JPG de alta calidad.
 
 
 
 
 🗺️ Navegación y UI/UX
 
-Lienzo Infinito: Herramienta panorámica (Pan) y zoom (rueda del mouse o pellizco en pantallas táctiles).
+- Lienzo Infinito: Herramienta panorámica (Pan) y zoom (rueda del mouse o pellizco en pantallas táctiles).
 
-Minimapa: Ventana flotante para ubicarte rápidamente en lienzos masivos.
+- Minimapa: Ventana flotante para ubicarte rápidamente en lienzos masivos.
 
-Diseño Responsive (Mobile-First): Interfaz adaptada para celulares y tablets, con menús ocultables (hamburguesa) y barras de herramientas deslizables con efecto Glassmorphism.
+- Diseño Responsive (Mobile-First): Interfaz adaptada para celulares y tablets, con menús ocultables (hamburguesa) y barras de herramientas deslizables con efecto Glassmorphism.
 
 
 
 
 🔐 Sistema de Cuentas (Dashboard)
 
-Autenticación Segura: Registro e inicio de sesión con contraseñas encriptadas (bcrypt) y tokens de sesión (JWT).
+- Autenticación Segura: Registro e inicio de sesión con contraseñas encriptadas (bcrypt) y tokens de sesión (JWT).
 
-Gestión de Perfil: Cambio de contraseña integrado.
+- Gestión de Perfil: Cambio de contraseña integrado.
 
-Organización: Creación de carpetas personalizadas para agrupar y filtrar proyectos.
+- Organización: Creación de carpetas personalizadas para agrupar y filtrar proyectos.
 
 
 💻 Tecnologías Utilizadas ----------------------------------------------------------------
 
 
-Frontend:
+- Frontend:
 
-HTML5 / CSS3 (Animaciones personalizadas, Flexbox, CSS Grid).
+  - HTML5 / CSS3 (Animaciones personalizadas, Flexbox, CSS Grid).
 
-Vanilla JavaScript (ES6+).
+  - Vanilla JavaScript (ES6+).
 
-PDF.js (Renderizado de documentos).
+  - PDF.js (Renderizado de documentos).
 
 
 
-Backend:
+- Backend:
 
-Node.js & Express.js (Servidor y API REST).
+  - Node.js & Express.js (Servidor y API REST).
 
-Socket.io (Comunicación bidireccional y sincronización de eventos).
+  - Socket.io (Comunicación bidireccional y sincronización de eventos).
 
-MongoDB & Mongoose (Persistencia de datos y usuarios).
+  - MongoDB & Mongoose (Persistencia de datos y usuarios).
 
-JWT & Bcrypt.js (Seguridad).
+  - JWT & Bcrypt.js (Seguridad).
 
 
 🚀 Instalación y Uso Local ----------------------------------------------------------------
@@ -103,39 +104,39 @@ JWT & Bcrypt.js (Seguridad).
 Sigue estos pasos para correr el proyecto en tu propia computadora:
 
 
-Clonar el repositorio:
+- Clonar el repositorio:
 
 
-git clone https://github.com/MaxiGP0/cuaderno-digital
+  - git clone https://github.com/MaxiGP0/cuaderno-digital
 
-cd cuaderno-digital
-
-
-
-Instalar las dependencias:
-
-npm install
+  - cd cuaderno-digital
 
 
 
-Configurar las variables de entorno:
+- Instalar las dependencias:
 
-Crea un archivo .env en la raíz del proyecto y añade tus credenciales:
-
-PORT=3000
-
-MONGO_URI=tu_cadena_de_conexion_de_mongodb
-
-JWT_SECRET=tu_clave_secreta
+  - npm install
 
 
-Iniciar el servidor:
 
-npm start
+- Configurar las variables de entorno:
 
-Abrir la aplicación:
+  - Crea un archivo .env en la raíz del proyecto y añade tus credenciales:
 
-Abrir http://localhost:3000 en tu navegador web.
+  - PORT=3000
+
+  - MONGO_URI=tu_cadena_de_conexion_de_mongodb
+
+  - JWT_SECRET=tu_clave_secreta
+
+
+- Iniciar el servidor:
+
+  - npm start
+
+- Abrir la aplicación:
+
+  - Abrir http://localhost:3000 en tu navegador web.
 
 
 
@@ -166,16 +167,16 @@ cuaderno-digital/
 
 🤝 Contribuciones ----------------------------------------------------------------
 
-Este proyecto fue creado con el objetivo de facilitar el estudio y la diagramación rápida.
+- Este proyecto fue creado con el objetivo de facilitar el estudio y la diagramación rápida.
 
-Si tienes ideas para mejorarlo, ¡las Pull Requests son bienvenidas!:
+- Si tienes ideas para mejorarlo, ¡las Pull Requests son bienvenidas!:
 
-Haz un Fork del proyecto.
+  - Haz un Fork del proyecto.
 
-Crea una rama para tu nueva característica (git checkout -b feature/NuevaCaracteristica).
+  - Crea una rama para tu nueva característica (git checkout -b feature/NuevaCaracteristica).
 
-Haz commit de tus cambios (git commit -m 'Añadir nueva característica').
+  - Haz commit de tus cambios (git commit -m 'Añadir nueva característica').
 
-Haz Push a la rama (git push origin feature/NuevaCaracteristica).
+  - Haz Push a la rama (git push origin feature/NuevaCaracteristica).
 
-Abre un Pull Request.
+  - Abre un Pull Request.
